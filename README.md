@@ -1,6 +1,7 @@
 # NAPA-dev
 Network Analysis of Protein Adaptation (intra-protein residue coevolution network construction and analysis)
-reates and analyses networks of coevolving protein mutations
+--------------------------------------------- 
+Creates and analyses networks of coevolving protein mutations
 
 Input: Protein alignments (fasta) or protein phylogenetic tree
        ensemble with a fasta file for each tree
