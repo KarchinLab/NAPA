@@ -1,9 +1,12 @@
 Need:  NAPA (python) package and wiki site with basic documentation for users
 Similar to /programs/PyCogent-1.0.1/cogent
 
-Audience:  professional bioinformatics programmers
-Input:  collection of sequences
-Outputs:  from each module
+Audience:  
+	professional bioinformatics programmers
+Input:  
+	collection of functionally related protein sequences
+Outputs:  
+	from each module
 
 Major question: How handle multiple external dependencies?
 Some dependencies have GPL license: PyCogent, ETEtoolkit
@@ -27,10 +30,9 @@ app
     - Output:  phylogenetic tree ensemble
         - https://github.com/mdrasmus/compbio (simple wrappers for running MrBayes)
         - http://www.phylo.org/software/python/cipres/index.html (CIPRES Python API)
--    wrap Cytoscape?
+-    wrap Cytoscape/Gephi
     - Output: network visualizations
     - likely, igraph is a dependency and can be used for visualization too
-
 
 ---------
 Phylo (phylo/)
@@ -49,12 +51,10 @@ modules for:
 
 ----------
 Network (mutpairs/ and net/)
+Inputs:  MSA or
+  Phylotree ensemble+MSA + ancestral reconstruction (optional: Function reconstruction)
 
-    Inputs:  MSA or
-                 Phylotree ensemble+MSA + ancestral reconstruction (optional: Function reconstruction)
-
-     modules for:
-
+modules for:
 - constructing an undirected network from an MSA
     - VB code (produces tab delimited files: source target weight fields
 - constructing a directed network from a phylogeny ensemble+MSA
@@ -70,12 +70,11 @@ Network (mutpairs/ and net/)
 
 
 outputs:
-
--      network
--      analysis results from network
-    - network properties
-    - node centralities
-    - path centralities
+	-  network
+	-  analysis results from network
+    	- network properties
+    	- node centralities
+    	- path centralities
 
 -------
 Draw
