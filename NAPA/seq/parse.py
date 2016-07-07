@@ -5,16 +5,15 @@ def fasta_iter(fasta_name):
     '''
     Given a fasta file. yield tuples of header,  sequence
     '''
-    fh = open(fasta_name)
-    faiter = (x[1] for x in groupby(fh,  lambda line: line[0] == ">"))
-    for header in faiter:
-        
-        header = header.next()[1:].strip() # drop the '>'
-        
-        #join all sequence lines into one string
-        seq = "".join(s.strip() for s in faiter.next()) 
-        
-        yield header,  seq
+    with open(fasta_name, 'rb') as fh:
+        faiter = (x[1] for x in groupby(fh,  
+                                        lambda line: line[0] == ">"))
+    
+        for header in faiter:
+            header = header.next()[1:].strip() # drop the '>'
+            #join all sequence lines into one string
+            seq = "".join(s.strip() for s in faiter.next()) 
+            yield header,  seq
 
 def fasta_to_dict(fasta_input_name):
     ''' Reads: Fasta-formatted sequence file.

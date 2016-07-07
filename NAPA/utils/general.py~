@@ -11,7 +11,7 @@ list_pairs = lambda x: [(x[i1],x[i2]) for i1 in range(len(x)-1) \
 get_int = lambda s: int(re.sub('\D','',s))
 
 #lists of strings
-sort_by_digits = lambda x: sorted(x, key = lambda s: get_int(s))
+sort_by_digits = lambda x: sorted(x, key = lambda s: getInt(s))
 
 #list sorting
 sort_list_by_other = lambda x,y: [x for (y,x) in sorted(zip(Y,X),

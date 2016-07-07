@@ -175,7 +175,7 @@ class PhyloEdge(object):
         return common_prec
 
 
-    def get_intermediate_prec(self, prec_list, annot_key, annot_combinations):
+    def get_intermediate_precs(self, prec_list, annot_key, annot_combinations):
         '''
         Intermediate edges between two phylo edges.
         '''

@@ -1,8 +1,26 @@
+#! /usr/bin/env python 
+
+# Notes: consider removing ete2/3 dependence
+# ete is GPL + only need the PhyloTree class implementation
+# https://github.com/etetoolkit/ete/blob/master/ete3/phylo/phylotree.py
+# need to be able to read Newick (*.nwk) files and build a 
+# general (nonbinary) phylo tree with attributes on nodes and edges 
+# FORMAT  DESCRIPTION
+# 1       flexible with internal node names
+
+
+from scipy import stats
 from ete2 import PhyloTree
-form NAPA.phylo.tree.edge import *
+
+from NAPA.utils.general import *
+from NAPA.phylo.tree.edge import *
 from NAPA.phylo.tree.tree import *
 
 class PhyloMut(object):
+    '''
+    Similar to AlnMut class, but counts phylo edges instead of 
+    alignmen sequences of occurrence.
+    '''
     def __init__(self, phylo_edge_pairs = set(), mut_str = None):
         self.mut_str = mut_str
         self.phylo_edge_pairs = set(phylo_edge_pairs)
@@ -17,78 +35,89 @@ class PhyloMut(object):
         return self.mut_str
 
 
-
 class PhyloMutPair(object):
     '''
     Pair of muts from tree.
-    '''
-    
+    '''    
     def __init__(self, phylo_edge_pairs = set(), mut_pair = None, 
-                 all_edges = set()):
+                 all_edges = set(), prot_func_transitions = {'':''}):
 
         # List of pairs of phylo_edge_objects
         if not len(phylo_edge_pairs):
-            raise ValueError('Set of Phylo edge pairs must be nonempty!')
+            raise ValueError('In PhyloMutPair: ' + \
+                             'Set of Phylo edge pairs must be nonempty!')
         else:
             self.phylo_edge_pairs = set(phylo_edge_pairs)
 
         # A unique pair of AA muts
-        if mut_pair ==  None:
-            print "WARNING: No mut pair given. Set to" + \
-                " first pair of muts for first " + \
-                " Phylo_edge pair!"
-            self.mut_pair = (phylo_edge_pairs[0][0].get_muts()[0], 
-                                 phylo_edge_pairs[0][1].get_muts()[1])
+        if mut_pair ==  None or not len(mut_pair):
+            raise ValueError('In PhyloMutPair: No mutations given!')
         else:
             self.mut_pair = mut_pair
+            self.name = '%s_%s' % (mut_pair[0].mut_str, mut_pair[1].mut_str)
+        if not len(all_edges):
+            raise ValueError('In PhyloMutPair: No edge pairs having each ' + \
+                             'mutation were given!')
+        else:
+            self.all_edges = set(all_edges)
+        self.prot_func_transitions = prot_func_transitions
 
-        self.all_edges = all_edges
-
+    def add_phylo_edge_pair(self, phylo_edge_pair):
+        self.phylo_edge_pairs.add(phylo_edge_pair) 
+    
+    def add_phylo_edge_pairs(self, phylo_edge_pairs):
+        self.phylo_edge_pairs.update(phylo_edge_pairs)
 
 
     def assign_lineage_distribution(self):
-
         common_lineage, mut0_lineage, mut1_lineage = [], [], []
         for pep in self.phylo_edge_pairs:
-            if pep[0] =  = pep[1]:
+            if pep[0] == pep[1]:
                 common_lineage  +=  [pep[0].parent] + [pep[0]] + pep[0].followers 
             else:
-                common_prec = pep[0].get_common_precursors(pep[1])
+                common_prec = pep[0].get_common_precs(pep[1], 'function', 
+                                                      self.prot_func_transitions)
                 common_follow = list(set([pep[0]] + pep[0].followers) & \
                                     set([pep[1]] + pep[1].followers))
                 common_lineage  +=  common_prec + common_follow
 
-                mut0_prec = pep[0].get_intermediate_prec(common_prec)
-                mut1_prec = pep[1].get_intermediate_prec(common_prec)
+                mut0_prec = pep[0].get_intermediate_prec(common_prec, 'function',
+                                                         self.prot_func_transitions)
+                mut1_prec = pep[1].get_intermediate_prec(common_prec, 'function',
+                                                         self.prot_func_transitions)
 
                 mut0_lineage += list(set(mut0_prec + pep[0].followers) - \
                                      set(common_prec + common_follow))
                 mut1_lineage += list(set(mut1_prec + pep[1].followers) - \
                                      set(common_prec + common_follow))
         
-
         self.common_lineage = set([p for p in common_lineage if p.muts])  
- 
         self.mut0_lineage = set([p for p in mut0_lineage if p.muts]) - \
                             self.common_lineage
         self.mut1_lineage = set([p for p in mut1_lineage if p.muts]) - \
                             self.common_lineage
-
         assoc_lineage = self.common_lineage | self.mut0_lineage | self.mut1_lineage
-
         self.other_lineage = self.all_edges - assoc_lineage
+        #self.print_lineages()
 
-    
+
     def print_lineages(self):
-        print "\tcommonLin:", [p.name for p in self.common_lineage]
-        print "\tmut0_lin:", [p.name for p in self.mut0_lineage]
-        print "\tmut1_lin:", [p.name for p in self.mut1_lineage]
-        print "\totherLin:", [p.name for p in self.other_lineage]
-        print 
+        stderr_write(["\tCommon Lineage:", 
+                      [p.name for p in self.common_lineage]])
+        stderr_write(["\tFirst mutation only lineage:", 
+                      [p.name for p in self.mut0_lineage]])
+        stderr_write(["\tSecond mutations only lineage:", 
+                     [p.name for p in self.mut1_lineage]])
+        stderr_write(["\tOther mutations lineage:", 
+                     [p.name for p in self.other_lineage]])
 
 
     def get_contingency_table(self):
-
+        '''
+        Contingency table for Fisher's Exact Test.
+        Uses overall size of clades where mutations in pair
+        occurred. 
+        '''
         common = len(self.common_lineage)
         only0 = len(self.mut0_lineage) 
         only1 = len(self.mut1_lineage)
@@ -97,9 +126,11 @@ class PhyloMutPair(object):
 
 
     def get_contingency_table_edge_counts(self):
-        ''' A simpler contingency table based on counts of co-occurrence of 
-        muts in tree edges rather than clades. '''
-
+        ''' 
+        A simpler contingency table based on counts of co-occurrence of 
+        muts in tree edges rather than clades. 
+        Looking at clade size tends to be more informative.
+        '''
         occur01 = len(self.phylo_edge_pairs)
         occur0 = len(self.mut_pair[0].phylo_edge_pairs - self.phylo_edge_pairs) 
         occur1 = len(self.mut_pair[1].phylo_edge_pairs - self.phylo_edge_pairs)
@@ -109,7 +140,13 @@ class PhyloMutPair(object):
         self.contingency_table = [[occur01, occur0], [occur1, occur_other]]
         
 
-    def get_fisher_pvals(self):
+    def get_fisher_pval(self):
+        '''
+        Uses scipy.stats to calculate Fisher's exact p-values based 
+        on the contingency table. For association, only need the 
+        right-tailed p-value: pval_more.
+        '''
+        self.assign_lineage_distribution()
         self.get_contingency_table()
         self.odds_ratio_less, self.p_val_less = \
                         stats.fisher_exact(self.contingency_table, 
@@ -119,414 +156,352 @@ class PhyloMutPair(object):
                         stats.fisher_exact(self.contingency_table, 
                                            alternative = 'greater')
 
+class PhyloMutPairSet(object):
 
+    def __init__(self, leaf_fasta_file = '', 
+                 int_node_fasta_file = '', aln_pos = [],
+                 wt_seq_str = '', wt_id = '', pos_subset = [], 
+                 leaf_seqid_to_prot_func = {'':''}, 
+                 leaf_seqid_to_prot_func_file = '', 
+                 int_seqid_to_prot_func = {'':''}, 
+                 int_seqid_to_prot_func_file = '', 
+                 prot_func_transitions = {},
+                 prot_func_transitions_file = '',
+                 sel_prot_func_list = [''],
+                 sel_prot_func_file = '',
+                 dist_thresh = 0.,
+                 tree_nwk_file = '',
+                 mut_pair_type = 'dir'):
+        
+        # Get sequences for ALL nodes on tree
+        # Sequences from MSA used in phylogeny reconstruction
+        # (These end up on tree leaves) AND
+        # Reconstructed internal node sequences
+        self.aln = BioSeqAln(aln_fasta_file = leaf_fasta_file,
+                             aln_pos = aln_pos, 
+                             annot_key = 'function', 
+                             seqid_to_annot = leaf_seqid_to_prot_func,
+                             seqid_to_annot_file = leaf_seqid_to_prot_func_file)
+        # Add reconstructed internal node sequences
+        self.aln.add_sequences_from_file(int_node_fasta_file)
 
-class PhyloMutPairUndir(object):
+        # Option to annotate sequences by (reconstructed) function
+        # Add reconstructed internal node sequences functions
+        self.aln.annot_seqs(annot_key = 'function',
+                            seqid_to_annot_file = int_seqid_to_prot_func_file,
+                            seqid_to_annot = int_seqid_to_prot_func)
 
-    def __init__(self, nwk_file, fasta_file, pos_list, pos_to_wt, 
-                 pos_subset, tip_to_prot_func, sel_prot_funcs, 
-                 int_prot_func_file, dist_thresh):
+        # Option to focus on protein region(s)/domain(s) of interest
+        self.aln.subset_aln_pos(pos_subset = pos_subset)
 
-        # Newick and corresponding FASTA aln. of leaf sequences
-        self.nwk_file = nwk_file
-        self.fasta_file = fasta_file
+        # Get mutations from ancestral/wt sequence 
+        # for each sequence in alignment
+        # option to focus on subset of aln./protein positions
+        self.get_wt_seq(wt_id, wt_seq_str)
+        self.wt_seq.extract_pos(pos_subset)
 
-        # List of positins in a protein, e.g 3,4,5...296
-        self.pos_list = pos_list
-
-        # Wildtype residue at a position
-        self.pos_to_wt = pos_to_wt
-
-        # Name (id) of each node in tree with associated function
-        # Protein function can be added to each node as an attribute instead
-        self.node_name_to_prot_func = tip_to_prot_func.copy()
-
-        # List of selected protein functions in tree/alignment
+        # Python dict representing selected transiotions
+        # between reconstructed functions in tree/alignment
         # If empty (default) all functions considered
-        self.sel_prot_funcs = sel_prot_funcs
+        # Example, when considering evolution of 
+        # extended-spectrum resistance (2be)
+        # {'2b':'2be', '2be':'2be', '2br':'2be', '2br':'2ber'}
+        self.get_prot_func_transitions(prot_func_transitions, 
+                                       prot_func_transitions_file)
 
-        # Names/ids of leaf nodes having selected function
-        self.prot_func_leaf_names = [node_name \
-                                     for node_name in self.node_name_to_prot_func \
-                                     if self.node_name_to_prot_func[node_name] in \
-                                     sel_prot_funcs]
+        # Names/ids of all tree nodes having selected function
+        self.get_sel_func_nodes(annot_key = 'function',
+                                annot_list_file = sel_prot_func_file,
+                                annot_list = sel_prot_func_list)
 
-        # Set of all phylogenetic tree edges
-        self.all_phylo_edge_pairs = set()
+        # Get the sequence ids of all leaf sequences annotated
+        # with the selected function and find most recent common ancestor
+        # This isolates subtree with given function
+        self.anc_node, self.sel_func_leaves = \
+                    get_mrca_subtree(tree_nwk_file = tree_nwk_file,
+                                     fasta_file = leaf_fasta_file,
+                                     sel_annot_nodes = self.sel_func_node_ids)
 
-        # Get muts along phylogenetic tree edges
-        self.get_internal_node_seq()
 
         # Get muts for seqs corresponding to protein function
-        self.get_prot_func_muts()
+        self.get_leaf_func_muts()
 
-        # Get reconstructed functions for phylo tree internal nodes and
-        # add them to known functions of tip nodes
-        self.node_to_prot_func.update(\
-                            read_keyval_dict(int_prot_func_file))
+        # Set of all phylogenetic tree edges
+        #self.all_phylo_edge_pairs = set()
 
         # The folling generates a linegraph object of the whole tree
         # it is a tree rooted in the edge between anc_node and its ancestor
         # nodes of PhyloEdge are edges are in the original tree
-        self.anc_edge = PhyloEdge(node_pair = [self.anc_node.up, self.anc_node], 
-                                  prot_func_dict = self.node_to_prot_func.copy(), 
-                                  parent = None, children = [], 
-                                  pos_list = self.pos_list, 
-                                  pos_to_wt = self.pos_to_wt)
+        self.anc_edge = PhyloEdge(parent_node = self.anc_node.up, 
+                                  child_node = self.anc_node,
+                                  aln = self.aln, wt_seq = self.wt_seq)
+
         self.anc_edge.build_edge_tree()
 
-        # Now get all possible undirected pairs
-        self.undir_pairs = []
-        self.get_undir_pairs(dist_thresh)
+        # Get set of all pairs of mutations occurring along tree
+        # default directed mutation pairs
+        self.mut_pair_type = 'undir' if 'undir' in mut_pair_type.lower() \
+                             else 'dir'
+        self.get_mut_pairs(dist_thresh, self.mut_pair_type)
+        self.mut_pairs_fisher_pvalues()
 
-
-    def get_internal_node_seqs(self):
-        ''' 
-        Read the tree from newick(nwk) file and link nodes
-        to their corresponding fasta seqs (uses ete2). 
-        Part could be moved to NAPA.phylo.tree module
+    def get_wt_seq(self, wt_id, wt_seq_str):
         '''
-        phylo_tree = load_tree_sequences(self.nwk_file, self.fasta_file)
-
-        # Get list of phylo node objects with selected function
-        # It starts with leaf nodes
-        self.prot_func_leaves = filter_leaves(phylo_tree, 
-                                             self.prot_func_leaf_names)
-
-        # Get common ancestor for leaves with function of interest
-        self.anc_node = self.get_mrca(phylo_tree, self.prot_func_nodes)
-
-
-    def get_prot_func_muts(self):
+        Obtain WT/ancestral sequence to which all other sequences in 
+        the alignment/phylogeny should be compared. Can provide id+sequence,
+        or the id of a sequence already in the alignment.
         '''
-        Get muts associated with a function that occur in selected tree leaves.
-        Uses ete2.
+        if len(wt_id) and len(wt_seq_str) == self.aln.length:
+            self.wt_seq = BioSeq(seq_id = wt_id, seq_str = wt_seq_str,
+                                 seq_type = 'Protein', 
+                                 seq_pos_list = self.aln_pos)
+        elif len(wt_id) and len(wt_seq_str) != self.aln.length:
+            if wt_id in self.aln.seqid_to_seq:
+                #stderr_write(['AlnMutPairSet WARNING:',
+                #              'Sequence length does not match alignment,',
+                #              'but sequence id in alignment. Replacing',
+                #              'with corresp. alignment sequence.'])
+                self.wt_seq = self.aln.seqid_to_seq[wt_id]
+            else:
+                stderr_write(['Invalid  input for WT sequence.',
+                              'Please enter valid id already in alignment.',
+                               'or a new sequence.'])
+                              
+        elif not len(wt_id) and len(wt_seq_str) == self.aln.length:
+            self.wt_seq = BioSeq(seq_id = 'Wild_type', 
+                                 seq_str = wt_seq_str,
+                                 seq_type = 'Protein', 
+                                 seq_pos_list = aln_pos)
+
+        else:
+            stderr_write(['Invalid  input for WT sequence.',
+                          'Please enter valid id already in alignment.',
+                          'or a new sequence.'])
+
+
+    def get_sel_func_nodes(self, annot_key = 'function',
+                           annot_list_file = '',
+                           annot_list = ['']):
+        if annot_list == [''] and len(annot_list_file):
+            annot_list = parse_column(annot_list_file)
+        
+        self.sel_func_node_ids = self.aln.seqids_with_annot(\
+                                    annot_key = annot_key,
+                                    annot_list = annot_list)
+        
+    def get_leaf_func_muts(self):
         '''
-        standard_aa = "ACDEFGHIKLMNPQRSTVWY" # list of standard amino acids
+        Get muts associated with a function that occur in 
+        selected tree leaves.
+        This is the subset of all mutations on the tree that is most 
+        associated with the function of interest.
+        '''
+        self.func_muts = []
+        for seqid in [leaf.name for leaf in self.sel_func_leaves]:
+            self.func_muts += self.wt_seq.get_substitutions(\
+                                        self.aln.seqid_to_seq[seqid])
+        self.func_muts = set(self.func_muts)
 
-        muts = set()
-        anc_seq = [self.pos_to_wt[p] for p in self.pos_list if p in self.pos_to_wt]
-        for node in self.prot_func_leaves:
-            node_seq = node.sequence
-            muts.update(set([anc_seq[i] + str(self.pos_list[i]) + node_seq[i] \
-                             for i in range(len(node_seq)) \
-                             if anc_seq[i]! = node_seq[i] \
-                             and node_seq[i] in standard_aa \
-                             and self.pos_list[i] in self.pos_subset]))
-        self.prot_func_muts = muts
+    def get_prot_func_transitions(self, prot_func_transitions = {}, 
+                                  prot_func_transitions_file = ''):
+        if not len(prot_func_transitions):
+            self.prot_func_transitions = \
+                        parse_keyval_dlist(prot_func_transitions_file)
+        else:
+            self.prot_func_transitions = prot_func_transitions
+
+    def check_edge_pair(self,start_edge, follow_edge, dist_thresh):
+        if start_edge.is_leaf_edge(): 
+            return False
+        if not self.check_edge(start_edge, dist_thresh):
+            return False
+        if not self.check_edge(follow_edge, dist_thresh):
+            return False
+        if not start_edge.check_dist(follow_edge, dist_thresh):
+            return False
+        return True
+
+    def check_edge(self, edge, dist_thresh):
+        if not edge.check_node_seq_annot('function', 
+                                         self.prot_func_transitions):
+            return False
+
+        if not len(set(edge.muts) & self.func_muts):
+            return False
+        # Edge is too long -- exceeds distance thresholds
+        if not edge.check_dist(edge, dist_thresh):
+            return False
+            
+        return True
+        
+
+    def add_phylo_edge_pair(self, phylo_edge_pair, mut_list_pair):
+        '''
+        Add a phylogeny edge pair on which edges each of the 
+        two mutations occurs.
+        mut_list_pair: mutation lists for first and second edge
+        in phylo_edge_pair
+        Also keep track of individual mutation occurrence.
+        '''
+        mut_set = set(mut_list_pair[0]+ mut_list_pair[1])
+        for mut_str in mut_set:
+            if mut_str not in self.mut_str_to_obj:
+                self.mut_str_to_obj[mut_str] = \
+                    PhyloMut(phylo_edge_pairs = set(phylo_edge_pair),
+                             mut_str = mut_str)
+            else:
+                self.mut_str_to_obj[mut_str].add_phylo_edge_pair(phylo_edge_pair)
+
+        for mut_str_pair in zip(mut_list_pair[0], mut_list_pair[1]):
+            if mut_str_pair not in self.mut_str_pair_to_obj:
+                self.mut_str_pair_to_obj[mut_str_pair] = \
+                    PhyloMutPair(phylo_edge_pairs = set([phylo_edge_pair]),
+                                 mut_pair = [self.mut_str_to_obj[mut_str_pair[0]],
+                                             self.mut_str_to_obj[mut_str_pair[1]]],
+                                 all_edges = self.all_edges)
+            else:
+                self.mut_str_pair_to_obj[mut_str_pair].add_phylo_edge_pair(\
+                                                                    phylo_edge_pair)
 
 
-    def get_undir_pairs(self, dist_thresh):
+    def get_mut_pairs(self, dist_thresh, mut_pair_type):
         ''' 
         Extract pairs of mutations occurring along tree edges
         '''
-        mut_pair_to_phylo_edge_pairs = defaultdict(list) 
-        mut_to_phylo_edge_pairs = defaultdict(list)
-        all_edges = [self.anc_edge] + [fe for fe in self.anc_edge.followers]
-        stderr_write(["\t\t_number of tree edges:", 
-                      len(all_edges)])
+        self.all_edges = [self.anc_edge] + \
+                         [fe for fe in self.anc_edge.followers]
+        self.all_edges = [e for e in self.all_edges \
+                          if self.check_edge(e, dist_thresh)]
         
-        stderr_write(["\t\t_assigning ordered precurors for all edges"])
-        for edge in all_edges:
-           edge.assign_ordered_precursors()
-        
-       
-        for start_edge in self.anc_edge.followers:
-            if start_edge.is_leaf_edge(): continue
-            if not start_edge.check_prot_func(): continue
+        stderr_write(['Number of tree edges considered:', 
+                      len(self.all_edges)])
 
-            if not start_edge.check_dist(start_edge, dist_thresh): continue
-            
+        # will hold sets of mutation(s)/ (pairs)
+        self.mut_str_pair_to_obj, self.mut_str_to_obj = {}, {}
 
+        for start_edge in self.all_edges:
             start_edge_sorted_muts = sort_by_digits(list(\
                                                     set(start_edge.muts) & \
-                                                         self.prot_func_muts))
+                                                         self.func_muts))
             if not len(start_edge_sorted_muts): continue
-
-            #stderr_write([start_edge.name, start_edge.muts])
-            if len(start_edge_sorted_muts)>1:
-                start_edge_mutation_pairs = list_pairs(start_edge_sorted_muts)
-                # get muts within same edge for all anc_edge + followers
-                for mut_pair in start_edge_mutation_pairs:
-                    mut_pair_to_phylo_edge_pairs[mut_pair].append((start_edge, start_edge))
-                    mut_to_phylo_edge_pairs[mut_pair[0]].append((start_edge, start_edge))
-                    mut_to_phylo_edge_pairs[mut_pair[1]].append((start_edge, start_edge))
+            # Make sure mutation pairs occurring on same edge included
+            if len(start_edge_sorted_muts) > 1:
+                self.add_phylo_edge_pair(phylo_edge_pair = (start_edge, start_edge), 
+                                         mut_list_pair = \
+                                         zip(*list_pairs(start_edge_sorted_muts)))
             
-            # get mutation pairs for all start, follow edge combinations
-            for follow_edge in start_edge.followers:
-                #if follow_edge.is_leaf_edge(): continue
-                if not follow_edge.check_prot_func(): continue
-                if not start_edge.check_dist(follow_edge, dist_thresh): continue
-               
+            if 'undir' in mut_pair_type.lower():
+                self.add_undir_pairs(start_edge, start_edge_sorted_muts, 
+                                     dist_thresh)
+            else:
+                self.add_dir_pairs(start_edge, start_edge_sorted_muts, 
+                                   dist_thresh)
                 
-                follow_edge_sorted_muts = list((set(follow_edge.muts) &\
-                                             self.prot_func_muts)-\
-                                            set(start_edge.muts))
-                
-                if not len(follow_edge_sorted_muts): continue
-        
-                for start_mut in start_edge_sorted_muts:
-                    for follow_mut in follow_edge_sorted_muts:
-                        if get_int(start_mut) < get_int(follow_mut):
-                            mut_pair_to_phylo_edge_pairs[(start_mut, follow_mut)].\
-                            append((start_edge, follow_edge))
-                            mut_to_phylo_edge_pairs[start_mut].\
-                                append((start_edge, follow_edge))
-                            mut_to_phylo_edge_pairs[follow_mut].\
-                                append((start_edge, follow_edge))
-
-                        elif get_int(start_mut) > get_int(follow_mut):
-                            mut_pair_to_phylo_edge_pairs[(follow_mut, start_mut)].\
-                                append((follow_edge, start_edge))
-                            mut_to_phylo_edge_pairs[start_mut].\
-                                append((follow_edge, start_edge))
-                            mut_to_phylo_edge_pairs[follow_mut].\
-                                append((follow_edge, start_edge))
+        stderr_write(['Number of mutations associated with function:', 
+                      len(self.mut_str_to_obj.keys())])
+        stderr_write(['Number of mutation pairs extracted', 
+                      len(self.mut_str_pair_to_obj.keys())])
 
 
-        stderr_write(["muts and prot_func muts", mut_to_phylo_edge_pairs.keys()])
-        all_muts = set(mut_to_phylo_edge_pairs.keys()) & set(self.prot_func_muts)
-        stderr_write(["\t\t_number of AA muts:", len(all_muts)])
-        
-        all_a_amut_edges = set([edge for edge in self.anc_edge.followers \
-                             if edge.check_prot_func()])
-        stderr_write(["\t\t_number of edges with non-silent mutations for protein function:", 
-                      len(all_a_amut_edges)])
- 
-        self.mut_to_obj = {}
-        for mut_pair in mut_pair_to_phylo_edge_pairs:
-            if mut_pair[0] not in self.mut_to_obj:
-                self.mut_to_obj[mut_pair[0]] = Mutation(mutation_str = mut_pair[0])
-            if mut_pair[1] not in self.mut_to_obj:
-                self.mut_to_obj[mut_pair[1]] = Mutation(mutation_str = mut_pair[1])
-            
-            self.mut_to_obj[mut_pair[0]].add_phylo_edge_pairs(set(\
-                                                mut_pair_to_phylo_edge_pairs[mut_pair]))
-            self.mut_to_obj[mut_pair[1]].add_phylo_edge_pairs(set(\
-                                                mut_pair_to_phylo_edge_pairs[mut_pair]))
+    def add_undir_pairs(self, start_edge, start_edge_sorted_muts, dist_thresh):
+        for follow_edge in start_edge.followers:
+            follow_edge_sorted_muts = sorted(list((set(follow_edge.muts) & \
+                                         self.func_muts) - set(start_edge.muts)))
 
-            undir_mut_pair = Mutation_pair(phylo_edge_pairs = list(set(\
-                                        mut_pair_to_phylo_edge_pairs[mut_pair])), 
-                                        mutation_pair = (self.mut_to_obj[mut_pair[0]], 
-                                                        self.mut_to_obj[mut_pair[1]]), 
-                                        all_edges = all_a_amut_edges)
-            undir_mut_pair.assign_lineage_distribution()
-            self.undir_pairs.append(undir_mut_pair)
+            if self.check_edge_pair(start_edge, follow_edge, dist_thresh):
+                # For undirected mutation pairs, mutations are ordered by 
+                # residue position
+                mut_pairs = [(sm, fm) for sm in start_edge_sorted_muts \
+                             for fm in follow_edge_sorted_muts \
+                             if get_int(sm) <= get_int(fm)]
+                self.add_phylo_edge_pair(phylo_edge_pair = (start_edge, follow_edge), 
+                                        mut_list_pair = [start_edge_sorted_muts,
+                                                         follow_edge_sorted_muts])
 
-        stderr_write(["\t\t_pairwise lineage dsitributions assigned."])
-        stderr_write(["\t\t_build contingencies."])
-        for mut_pair in self.undir_pairs:
-            mut_pair.get_contingency_table()
-                        
+            # Reverse order of mutations in cases where follower position
+            # is less than start position and distance from follower to start
+            # is less than threshold
+            if self.check_edge_pair(follow_edge, start_edge, dist_thresh):
+                rev_mut_pairs = [(fm, sm) for sm in start_edge_sorted_muts \
+                                 for fm in follow_edge_sorted_muts \
+                                 if get_int(sm) > get_int(fm)]
+                self.add_phylo_edge_pair(phylo_edge_pair = (follow_edge, start_edge), 
+                                         mut_list_pair = [follow_edge_sorted_muts,
+                                                         start_edge_sorted_muts])
+
+
+    def add_dir_pairs(self, start_edge, start_edge_sorted_muts, dist_thresh):
+        for follow_edge in start_edge.followers:
+            follow_edge_sorted_muts = sorted(list((set(follow_edge.muts) & \
+                                         self.func_muts) - set(start_edge.muts)))
+
+            if self.check_edge_pair(start_edge, follow_edge, dist_thresh):
+                # For undirected mutation pairs, mutations are ordered by 
+                # residue position
+                mut_pairs = [(sm, fm) for sm in start_edge_sorted_muts \
+                             for fm in follow_edge_sorted_muts]
+                self.add_phylo_edge_pair(phylo_edge_pair = (start_edge, follow_edge), 
+                                         mut_list_pair = [start_edge_sorted_muts,
+                                                          follow_edge_sorted_muts])
+
+
+    def mut_pairs_fisher_pvalues(self):
+        '''
+        Calculate Fisher's Exact Test p-value, 
+        for each PhyloMutPair object
+        '''
+        for mut_str_pair in self.mut_str_pair_to_obj:
+            mut_pair = self.mut_str_pair_to_obj[mut_str_pair]
+            mut_pair.get_fisher_pval()
+
 
     def __repr__(self):
         out_str = '\t'.join(['_Mut1_', '_Mut2_', 'edgePairList', 
                           'contTable(common_1_2_other)', 
                           "FisherPvalLess", "FisherPvalMore"]) + '\n'
-        
-        for undir_pair_idx in range(len(self.undir_pairs)):
-            undir_pair = self.undir_pairs[undir_pair_idx]
-            
-            if len(undir_pair.contingency_table)<_to_:
+        for mut_str_pair in self.mut_str_pair_to_obj:
+            mut_pair = self.mut_str_pair_to_obj[mut_str_pair]
+            if len(flatten(mut_pair.contingency_table)) < 4:
                 continue
-            
-            if len(flatten(undir_pair.contingency_table))<4:
-                continue
-            if undir_pair.contingency_table[0][1] =  = 0:
-                if undir_pair.contingency_table[1][0] =  = 0:
-                    if undir_pair.contingency_table[0][0]< = 2:
+            if mut_pair.contingency_table[0][1] == 0:
+                if mut_pair.contingency_table[1][0] == 0:
+                    if mut_pair.contingency_table[0][0] < 2:
                         continue
-           
-            to_print = [str(undir_pair.mutation_pair[0]), 
-                       str(undir_pair.mutation_pair[1])]
-            to_print.append(str(len(undir_pair.phylo_edge_pairs)))
-            to_print.append(str(undir_pair.contingency_table))
-            to_print.append(str(undir_pair.p_val_less))
-            to_print.append(str(undir_pair.p_val_more))
-            out_str +=  '\t'.join(toPrint) + '\n'
-
+            to_print = [mut_pair.name]
+            to_print.append(str(len(mut_pair.phylo_edge_pairs)))
+            to_print.append(str(mut_pair.contingency_table))
+            to_print.append(str(mut_pair.p_val_less))
+            to_print.append(str(mut_pair.p_val_more))
+            out_str +=  '\t'.join(to_print) + '\n'
         return out_str
 
-# Should set this up to inherit from PhyloMutPairSetUndir
-class PhyloMutPairSetDir(object):
-
-    def __init__(self, nwk_file, fasta_file, pos_list, pos_to_wt, tip_to_pheno, pheno_clades, 
-                 dist_thresh):
-        self.nwk_file = nwk_file
-        self.fasta_file = fasta_file
-        self.pos_list = pos_list
-        self.pos_to_wt = pos_to_wt
-        self.node_to_pheno = tip_to_pheno.copy()        
-        self.all_phylo_edge_pairs = set()
-
-        # read the tree from newick(nwk) file and link nodes to corresp. fasta seqs
-        self.phylo_tree = Phylo_tree(newick = self.nwk_file, format = 1)
-        self.phylo_tree.link_to_alignment(alignment = self.fasta_file, alg_format = 'fasta')
-        
-        #stderr_write(pheno_clades)
-        self.pheno_leaf_nodes = filter(lambda phylo_node: \
-                                     phylo_node.name in flatten(pheno_clades.values()), 
-                                self.phylo_tree.get_leaves())
-        self.pheno_name_nodes  = filter(lambda phylo_node: \
-                                     phylo_node.name in pheno_clades["_to_be"], 
-                                self.phylo_tree.get_leaves())
-        self.get_pheno_muts()
-        self.anc_node = self.phylo_tree.get_common_ancestor(self.pheno_name_nodes)
-        stderr_write(['\t_mrca 2be', self.anc_node.name, 
-                          '\t' + str(datetime.now())])
-
-        int_pheno_file =  nwk_file.replace("int_nwk.tree", "internalStates.txt")
-        int_pheno_file =  int_pheno_file.replace("int_sub_pheno.tree", "internalStates.txt")
-        with open(int_pheno_file, 'rb') as pf:
-            stderr_write(["internal node pheno", int_pheno_file])
-            line_recs = [line.strip().split() \
-                        for line in pf.read().replace('"', '').split('\n')]
-            for recs in line_recs:
-                if len(recs)>1:
-                    self.node_to_pheno[recs[0]] = recs[1]
-        
-        stderr_write(["nodes and internal nodes with phenotype", len(self.node_to_pheno)])
-
-        # The folling generates a linegraph object of the whole tree
-        # it is a tree rooted in the edge between anc_node and its ancestor
-        self.anc_edge = Phylo_edge(node_pair = [self.anc_node.up, self.anc_node], 
-                                 pheno_dict = self.node_to_pheno.copy(), 
-                                 parent = None, children = [], pos_list = self.pos_list, 
-                                 pos_to_wt = self.pos_to_wt)
-        self.anc_edge.build_edge_tree()
-
-        # Now get all possible directed pairs
-        self.dir_pairs = []
-        self.get_dir_pairs(dist_thresh)
-        stderr_write(["\t_finished extracting pairs:", self.nwk_file.split('/')[-1], 
-                      datetime.now()])
-
-
-    def get_pheno_muts(self):
-        standard_aa = "ACDEFGHIKLMNPQRSTVWY" # list of standard amino acids
-
-        mutations = []
-        for node in self.pheno_name_nodes:
-            node_seq = node.sequence
-            anc_seq = [self.pos_to_wt[p] for p in self.pos_list if p in self.pos_to_wt]
-            mutations  +=   [anc_seq[i] + str(self.pos_list[i]) + node_seq[i] \
-                        for i in range(len(node_seq)) \
-                               if anc_seq[i]! = node_seq[i] and \
-                           node_seq[i] in standard_aa and self.pos_list[i]>_to_3]
-        self.pheno_mutations = set(mutations)
-        stderr_write(["phenotype mutations"] + list(self.pheno_mutations))
-
-    def get_dir_pairs(self, dist_thresh):
-        mut_pair_to_phylo_edge_pairs = defaultdict(list) 
-        mut_to_phylo_edge_pairs = defaultdict(list)
-        all_edges = [self.anc_edge] + self.anc_edge.followers
-        for edge in all_edges:
-            edge.assign_ordered_precursors()
-        stderr_write(["\t\t_number of tree edges:", len(all_edges)])
-
-        for start_edge in self.anc_edge.followers:
-            if start_edge.is_leaf_edge(): continue
-            if not start_edge.check_pheno(): continue
-            if start_edge.check_dist(start_edge, dist_thresh):
-                start_edge_sorted_mutations = sort_by_digits(list(\
-                                                    set(start_edge.mutations) & \
-                                                        self.pheno_mutations))
-                if not len(start_edge_sorted_mutations): continue
-                if len(start_edge_sorted_mutations)>1:
-                    start_edge_mutation_pairs = list_pairs(start_edge_sorted_mutations)
-                    start_edge_sorted_mutations.reverse()
-                    start_edge_mutation_pairs  +=  list_pairs(start_edge_sorted_mutations)
-                    for mut_pair in start_edge_mutation_pairs:
-                        if get_int(mut_pair[0]) ==  get_int(mut_pair[1]): continue
-                        mut_pair_to_phylo_edge_pairs[mut_pair].append((start_edge, start_edge))
-                        mut_to_phylo_edge_pairs[mut_pair[0]].append((start_edge, start_edge))
-                        mut_to_phylo_edge_pairs[mut_pair[1]].append((start_edge, start_edge))
-
-            # get mutation pairs for all start, follow edge combinations
-            for follow_edge in start_edge.followers:
-                #if follow_edge.is_leaf_edge(): continue
-                if (not follow_edge.check_pheno()):
-                    continue
-                if not start_edge.check_dist(follow_edge, dist_thresh):
-                    continue
-
-                follow_edge_sorted_mutations = list((set(follow_edge.mutations) &\
-                                             self.pheno_mutations)-\
-                                            set(start_edge.mutations)) 
-
-                if not len(follow_edge_sorted_mutations): continue
-                for start_mut in start_edge_sorted_mutations:
-                    for follow_mut in follow_edge_sorted_mutations:
-                        if get_int(start_mut) ==  get_int(follow_mut):
-                            continue
-                        mut_pair_to_phylo_edge_pairs[(start_mut, follow_mut)].\
-                            append((start_edge, follow_edge))
-                        mut_to_phylo_edge_pairs[start_mut].\
-                                append((start_edge, follow_edge))
-                        mut_to_phylo_edge_pairs[follow_mut].\
-                                append((start_edge, follow_edge))
-        
-        all_mutations = set(mut_to_phylo_edge_pairs.keys()) & set(self.pheno_mutations)
-        stderr_write(["\t\t_number of AA mutations for pheno:", len(all_mutations)])
-
-        #stderr_write(list(set(flatten(mut_pair_to_phylo_edge_pairs.keys()))))
-        stderr_write(["\t\t_number of AA mutations for phenotype:", 
-                      len(all_mutations)])
-        
-        all_a_amut_edges = set([edge for edge in all_edges if edge.check_pheno()])
-        stderr_write(["\t\t_number of edges with non-silent mutations for phenotype:", 
-                      len(all_a_amut_edges)])
- 
-        self.mut_to_obj = {}
-        for mut_pair in mut_pair_to_phylo_edge_pairs:
-            if mut_pair[0] not in self.mut_to_obj:
-                self.mut_to_obj[mut_pair[0]] = Mutation(mutation_str = mut_pair[0])
-            if mut_pair[1] not in self.mut_to_obj:
-                self.mut_to_obj[mut_pair[1]] = Mutation(mutation_str = mut_pair[1])
-            
-            self.mut_to_obj[mut_pair[0]].add_phylo_edge_pairs(set(\
-                                                mut_pair_to_phylo_edge_pairs[mut_pair]))
-            self.mut_to_obj[mut_pair[1]].add_phylo_edge_pairs(set(\
-                                                mut_pair_to_phylo_edge_pairs[mut_pair]))
-
-            mut_pair = Mutation_pair(phylo_edge_pairs = list(set(\
-                                        mut_pair_to_phylo_edge_pairs[mut_pair])), 
-                                        mutation_pair = (self.mut_to_obj[mut_pair[0]], 
-                                                        self.mut_to_obj[mut_pair[1]]), 
-                                        all_edges = all_a_amut_edges)
-            mut_pair.assign_lineage_distribution()
-            self.dir_pairs.append(mut_pair)
-
-        stderr_write(["\t\t_pairwise lineage dsitributions assigned"])
-        stderr_write(["\t\t_build contingencies."])
-        for mut_pair in self.dir_pairs:
-            mut_pair.get_contingency_table()
-                
-    def __repr__(self):
-        out_str = '\t'.join(['_Mut1_', '_Mut2_', 'edgePairNum', 
-                          'contTable(common_1_2_other)', 
-                          "FisherPvalLess", "FisherPvalMore"]) + '\n'
-        
-        for dir_pair_idx in range(len(self.dir_pairs)):
-            dir_pair = self.dir_pairs[dir_pair_idx]
-
-            if len(dir_pair.contingency_table)<_to_:
-                continue
-            
-            if len(flatten(dir_pair.contingency_table))<4:
-                continue
-            if dir_pair.contingency_table[0][1] =  = 0:
-                if dir_pair.contingency_table[1][0] =  = 0:
-                    if dir_pair.contingency_table[0][0]< = 2:
-                        continue
-
-            to_print = [str(dir_pair.mutation_pair[0]), str(dir_pair.mutation_pair[1])]
-            to_print.append(str(len(dir_pair.phylo_edge_pairs)))
-            to_print.append(str(dir_pair.contingency_table))
-            to_print.append(str(dir_pair.p_val_less))
-            to_print.append(str(dir_pair.p_val_more))
-            out_str +=  '\t'.join(toPrint) + '\n'
-
-        return out_str
     
-                                         
+
+class CombinedPhyloMutPairs(object):
+
+    def __init__(self, phylo_mut_pair_set, pval_thresh = 0.05):
+        self.pval_thresh = pval_thresh
+        self.mut_pair_to_tree_num = defaultdict(int)
+        self.add_mut_pairs(phylo_mut_pair_set)
+    
+
+    def add_mut_pairs(self, phylo_mut_pair_set):
+        '''
+        add mutation pairs from a set calculated for a single tree
+        all mutations passing the Fisher's exact test with a significant 
+        right-tailed p-value are added
+        '''
+        for mut_str_pair in phylo_mut_pair_set.mut_str_pair_to_obj:
+            if phylo_mut_pair_set.mut_str_pair_to_obj[mut_str_pair].p_val_more <= \
+               self.pval_thresh:
+                self.mut_pair_to_tree_num[mut_str_pair] += 1
+
+
+    def __repr__(self):
+        out_str = ''
+        for mut_pair in self.mut_pair_to_tree_num:
+            out_str += '%s_%s\t%d\n'%(mut_pair[0], mut_pair[1], 
+                                    self.mut_pair_to_tree_num[mut_pair])
+        return out_str
+        
+               

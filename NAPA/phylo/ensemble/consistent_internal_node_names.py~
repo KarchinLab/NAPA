@@ -1,0 +1,4 @@
+# Not tested on test set
+# Renames internal node names from newick tree files
+# and alignment files to be consistent with each other
+

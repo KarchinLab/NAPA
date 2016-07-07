@@ -16,7 +16,7 @@ class PhyloEdge(object):
     def __init__(self, parent_node = None, child_node = None,
                  aln = None, wt_seq = None,
                  parent = None, children = []):
-        
+
         # parent node in edge, a PhyloTree Object        
         self.parent_node = parent_node 
         self.parent_node_name = "ANC" if not parent_node else parent_node.name
@@ -24,25 +24,20 @@ class PhyloEdge(object):
         # child node in PhyloTree, representing edge target
         self.child_node = child_node
         self.child_node_name = child_node.name
-
+        
         # name edge by parent-child names
-        self.name = '%s__%s' % (self.parent_node_name, self.child_node_name)
+        self.name = '%s__%s'%(self.parent_node_name, self.child_node_name)
 
         # assign BioSeq sequence objects to parent and child 
-        self.wt_seq = wt_seq
         self.aln = aln
         self.assign_node_seqs()
-
-        # Get mutations for all sequences in alignment
-        self.aln.get_seq_muts(wt_seq = self.wt_seq)        
-        
+            
         # Get set of mutations/mut positions along this PhyloTree edge
         self.get_muts()
         self.mut_pos = [get_int(m) for m in self.muts]
 
         # parent edge = another node pair whose target = phyloEdge's source
         self.parent = parent 
-
         # child edges = node pairs whose source = phyloEdge's target
         self.get_node_children(children)
                 
@@ -63,7 +58,7 @@ class PhyloEdge(object):
         else:
             self.parent_node_seq = self.wt_seq
 
-        if self.child_node_name in self.aln.seqid_to_seq:
+        if self.child_node_name in aln.seqid_to_seq:
             self.child_node_seq = self.aln.seqid_to_seq[self.child_node_name] 
         else:
             self.child_node_seq = self.wt_seq
@@ -107,7 +102,6 @@ class PhyloEdge(object):
         for child in self.children:
             child.precs = list(set(self.precs + [self]))
             child.build_edge_precs()
-
    
     def assign_ordered_precs(self):
         '''
@@ -156,9 +150,9 @@ class PhyloEdge(object):
         Common precursors for a two phylo edges. 
         '''
         common_prec = []
-        if self.parent == None or other.parent == None:
+        if self.parent =  = None or other.parent =  = None:
             common_prec = [] # case of one of the edges being root
-        elif self ==  other:
+        elif self = =  other:
             common_prec = [self, self.parent]
         elif self in other.precs:
             common_prec = [self.parent, self]
@@ -179,8 +173,7 @@ class PhyloEdge(object):
         '''
         Intermediate edges between two phylo edges.
         '''
-        intermediates = [self] if self.check_node_seq_annot(annot_key, annot_combinations) \
-                        else []
+        intermediates = [self] if self.check_prot_func else []
 
         if not len(prec_list):
             intermediates  +=  [p for p in self.ordered_precs \
@@ -213,6 +206,7 @@ class PhyloEdge(object):
         if self.child_node_name in self.aln.seqid_to_mut:
             child_node_mutations = self.aln.seqid_to_mut[self.child_node_name]
         self.muts = list(set(child_node_mutations) - set(parent_node_mutations))    
+
 
 
     def is_leaf_edge(self):
@@ -248,7 +242,7 @@ class PhyloEdge(object):
         Get newick format string for phylo edge tree.
         '''
 
-        if self.parent ==  root_parent:
+        if self.parent = =  root_parent:
             if not len(self.children): 
                 return nwk_str + str(self.name)
             child_names = [c.name for c in self.children]
@@ -296,7 +290,7 @@ class PhyloEdge(object):
             to_print.append('ordered_prec: ' + \
                             ';'.join([op.name \
                                       for op in self.ordered_precs if op])) 
-        return '\n\t'.join(to_print)
+        return '\n\t'.join(toPrint)
                                          
 
 
