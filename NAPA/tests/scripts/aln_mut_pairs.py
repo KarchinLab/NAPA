@@ -79,7 +79,7 @@ def main():
                                   sel_prot_func = inp.sel_prot_func_list)
         
     with open(args.netFile, 'wb') as f:
-        f.write(alnMutPairSet.write_jaccard_weights_table(min_co_occur = 2))
+        f.write(alnMutPairSet.write_jaccard_weights_network(min_co_occur = 2))
     
 if __name__ == '__main__': main()
 

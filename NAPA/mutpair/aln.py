@@ -228,6 +228,20 @@ class AlnMutPairSet(object):
 
         return out_str
                                          
+    def write_jaccard_weights_network(self, min_co_occur = 0):
+        out_str = '\t'.join(['Source', 'Target', 'weight']) + '\n'
+        
+
+        for mut_str_pair in self.mut_pair_to_obj:
+            aln_mut_pair = self.mut_pair_to_obj[mut_str_pair]
+            aln_mut_pair.get_jaccard_weight(min_co_occur = min_co_occur)
+
+            if aln_mut_pair.jaccard == 0.:
+                continue
+
+            out_str += str(aln_mut_pair) + '\t' + str(aln_mut_pair.jaccard) + '\n'
+
+        return out_str
 
 
     def __repr__(self):

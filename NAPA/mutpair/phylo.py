@@ -497,6 +497,13 @@ class CombinedPhyloMutPairs(object):
                 self.mut_pair_to_tree_num[mut_str_pair] += 1
 
 
+    def write_phylo_network(self):
+        out_str = ''
+        for mut_pair in self.mut_pair_to_tree_num:
+            out_str += '%s\t%s\t%d\n'%(mut_pair[0], mut_pair[1], 
+                                    self.mut_pair_to_tree_num[mut_pair])
+        
+
     def __repr__(self):
         out_str = ''
         for mut_pair in self.mut_pair_to_tree_num:

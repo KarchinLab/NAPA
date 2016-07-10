@@ -30,7 +30,8 @@ def parseArgs():
 def main():
     args = parseArgs()
     mg = MutNet(net_file=args.netFile, net_type = args.mutNetType)
-    mg.get_path_between_path_cent(path_node_length = 3, cent_list = ['k_path'])
+    mg.get_path_between_path_cent(path_node_length = 3, cent_list = ['shortest_path',
+                                                                     'k_path'])
     mg.write_path_betw_path_cent(args.pathCentOutFile)
 
 

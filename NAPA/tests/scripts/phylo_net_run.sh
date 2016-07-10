@@ -22,8 +22,8 @@ ls -lh $dataDir/run[1-2]/*anc.prot.fasta|  awk '{print $9}'   >  $intSeqFileList
 #Input arguments
 treeDistThresh=0.5
 pvalThresh=0.01
-mutPairType='undir'
-#mutPairType='dir'
+#mutPairType='undir'
+mutPairType='dir'
 wtId='TEM_1'
 
 #Output file
