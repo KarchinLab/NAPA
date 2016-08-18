@@ -1,9 +1,4 @@
 import argparse
-import os, sys
-
-pwd = os.getcwd()
-sys.path.append(pwd[0:pwd.find('/NAPA/')]) # NAPA package path
-
 
 from NAPA.utils.general import *
 from NAPA.net.net import *
@@ -65,8 +60,7 @@ def main():
             centralities =  [c for c in mn.get_default_cent_list() if 'glob' in c]
 
 
-        header = 'node.or.path' + (args.pathLength - 1) * '\t' + '\t'.join(centralities) + \
-                 '\tnum.net.nodes\n'
+        header = 'Node' + (args.pathLength - 1) * '\t' + '\t'.join(centralities)+'\n'
         out_str = mn.get_rel_cent(cent_list = centralities, path_len = args.pathLength)
 
         with open(args.centOutFile, 'wb') as cf:

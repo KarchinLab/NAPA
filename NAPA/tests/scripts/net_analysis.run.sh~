@@ -1,6 +1,6 @@
 #!/bin/bash
 
-projDir=$1
+projDir=/mnt/disk003/projects/epistasis/intragene-epistasis/TEM-network_dir/exprs/
 projDir=$projDir/NAPA
 dataDir=$projDir/tests/data
 resultsDir=$projDir/tests/results
