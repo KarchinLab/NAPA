@@ -150,7 +150,7 @@ class BioSeqAln(object):
             self.subset_aln_pos(kwargs.get('pos_subset', []))
 
         if not len(self.aln_pos):
-            sterr_write(['WARNING (BioSeqAln):',
+            stderr_write(['WARNING (BioSeqAln):',
                          'Default alignment positions set.'])
             self.aln_pos = self.seqid_to_seq[self.seqid_to_seq.keys()[0]].seq_pos_list
 
@@ -295,7 +295,7 @@ class BioSeqAln(object):
             for seqid in self.seqid_to_mut:
                 if len(pos_subset):
                     of.write('\t'.join(seqid, 
-                                   ','.join([m for mut in self.seqid_to_mut[seqid] \
+                                   ','.join([mut for mut in self.seqid_to_mut[seqid] \
                                              if mut in pos_subset]))+'\n')
                 else:
                     of.write('\t'.join(seqid, ','.join(self.seqid_to_mut[seqid]))+'\n')

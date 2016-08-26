@@ -5,8 +5,8 @@ import sys
 
 #print sys.path
 
-from NAPA.utils.general import *
-from NAPA.mutpair.aln import * # Netw. construct from alignment
+from napa.utils.general import *
+from napa.mutpair.aln import * # Netw. construct from alignment
 
 
 def parse_args():

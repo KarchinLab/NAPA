@@ -5,8 +5,8 @@ from os.path import isfile, join
 import itertools
 from collections import defaultdict
 
-from NAPA.utils.general import *
-from NAPA.mutpair.phylo import * # Netw. construct from alignment
+from napa.utils.general import *
+from napa.mutpair.phylo import * # Netw. construct from alignment
 
 
 def parse_args():

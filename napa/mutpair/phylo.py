@@ -271,7 +271,7 @@ class PhyloMutPairSet(object):
             self.wt_seq = BioSeq(seq_id = 'Wild_type', 
                                  seq_str = wt_seq_str,
                                  seq_type = 'Protein', 
-                                 seq_pos_list = aln_pos)
+                                 seq_pos_list = self.aln_pos)
 
         else:
             stderr_write(['Invalid  input for WT sequence.',

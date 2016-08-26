@@ -14,7 +14,7 @@ get_int = lambda s: int(re.sub('\D','',s))
 sort_by_digits = lambda x: sorted(x, key = lambda s: get_int(s))
 
 #list sorting
-sort_list_by_other = lambda x,y: [x for (y,x) in sorted(zip(Y,X),
+sort_list_by_other = lambda x,y: [x for (y,x) in sorted(zip(y,x),
                                         key=lambda pair: pair[0])]
 
 

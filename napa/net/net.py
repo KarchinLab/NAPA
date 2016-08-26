@@ -10,6 +10,8 @@ import random
 import networkx as nx
 from networkx.utils import weighted_choice
 
+
+
 from napa.utils.general import *
 
 
@@ -33,8 +35,8 @@ def file_line_iterator(file_name):
             yield line.strip()
 
 def file_line_list(file_name):
-    return f.readlines()
-
+    with open(file_name, 'rb') as f:
+        return f.readlines()
 
 #-----------------------------------------------------------------------#
 class MutNet(object):
@@ -67,7 +69,7 @@ class MutNet(object):
             self.g = deepcopy(net)
             self.directed = nx.is_directed(net)
         except:
-            raise MutNetCreate('NetworkX format error.')
+            raise Exception('NetworkX format error.')
 
 
     def get_reverse_net(self):
@@ -371,8 +373,9 @@ class MutNet(object):
                                    if path in self.path_cent[cent] \
                                    else str(0.) for cent in sorted_cent_names]) + '\n')
 
-    def get_gn_communities(self):
-        self.components = nx.girvan_newman(self.g, weight='weight')
+    #def get_gn_communities(self): 
+        #self.components =  girvan_newman(self.g, weight='weight')
+        
 
 
     def write_communities(self, output_file):

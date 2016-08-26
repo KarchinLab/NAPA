@@ -5,8 +5,8 @@ pwd = os.getcwd()
 sys.path.append(pwd[0:pwd.find('/NAPA/')]) # NAPA package path
 
 
-from NAPA.utils.general import *
-from NAPA.net.net import *
+from napa.utils.general import *
+from napa.net.net import *
 
 def parseArgs():
     #Notes: perhaps better a yaml file with options for analysis

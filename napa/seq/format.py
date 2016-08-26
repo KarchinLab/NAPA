@@ -28,12 +28,12 @@ def write_wrap_fasta_dict(id_sequence_dict={},
     with open(fasta_output_name,  'w') as f:
         if not sort:
             for seq_id in id_sequence_dict:
-                f.write(write_wrap_fasta(seq_id, 
+                f.write(write_wrap_fasta_seq(seq_id, 
                                          id_sequence_dict[seq_id], 
                                          wrap_at))
         else:
             for seq_id in sorted(id_sequence_dict.keys()):
-                f.write(write_wrap_fasta(seq_id, 
+                f.write(write_wrap_fasta_seq(seq_id, 
                                          id_sequence_dict[seq_id], 
                                          wrap_at))
                                         
