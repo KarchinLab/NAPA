@@ -10,7 +10,7 @@ import random
 import networkx as nx
 from networkx.utils import weighted_choice
 
-from NAPA.utils.general import *
+from napa.utils.general import *
 
 
 def window(seq, n=2):

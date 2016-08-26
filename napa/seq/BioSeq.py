@@ -6,9 +6,9 @@ from collections import OrderedDict
 import copy
 import re
 
-from NAPA.utils.general import *
-from NAPA.seq.parse import *
-from NAPA.seq.format import *
+from napa.utils.general import *
+from napa.seq.parse import *
+from napa.seq.format import *
 
 class BioSeq(object):
 

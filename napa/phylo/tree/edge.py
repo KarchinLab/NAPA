@@ -1,7 +1,7 @@
 #! /usr/bin/env python 
 
 from ete2 import PhyloTree
-from NAPA.seq.BioSeq import *
+from napa.seq.BioSeq import *
 
 
 class PhyloEdge(object):

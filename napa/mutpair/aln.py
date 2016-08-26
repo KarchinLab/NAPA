@@ -3,8 +3,8 @@
 from collections import defaultdict
 from scipy import stats
 
-from NAPA.utils.general import *
-from NAPA.seq.BioSeq import *
+from napa.utils.general import *
+from napa.seq.BioSeq import *
 
 
 class AlnMut(object):

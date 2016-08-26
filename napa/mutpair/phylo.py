@@ -12,9 +12,9 @@
 from scipy import stats
 from ete2 import PhyloTree
 
-from NAPA.utils.general import *
-from NAPA.phylo.tree.edge import *
-from NAPA.phylo.tree.tree import *
+from napa.utils.general import *
+from napa.phylo.tree.edge import *
+from napa.phylo.tree.tree import *
 
 class PhyloMut(object):
     '''
