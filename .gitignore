@@ -1,0 +1,3 @@
+/dist/
+/napa.egg-info/
+ *.pyc
