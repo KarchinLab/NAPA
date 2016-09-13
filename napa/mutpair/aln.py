@@ -229,7 +229,9 @@ class AlnMutPairSet(object):
         return out_str
                                          
     def write_jaccard_weights_network(self, min_co_occur = 0):
-        out_str = '\t'.join(['Source', 'Target', 'weight']) + '\n'
+        #MCR - Remove header to have network file same as the one from phylo_mut_pairs
+        #out_str = '\t'.join(['Source', 'Target', 'weight']) + '\n'
+        out_str = '';
         
 
         for mut_str_pair in self.mut_pair_to_obj:
