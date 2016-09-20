@@ -51,12 +51,6 @@ class PhyloEdge(object):
         self.ordered_precs = []
 
 
-    def __iter__(self):
-        for p_edge in chain(*imap(iter, self.children)):
-            yield p_edge
-        yield self
-
-
     def assign_node_seqs(self):
         if self.parent_node_name in self.aln.seqid_to_seq:
             self.parent_node_seq = self.aln.seqid_to_seq[self.parent_node_name]
@@ -241,51 +235,6 @@ class PhyloEdge(object):
     def check_mut_pos(self):
         if not len(self.mut_pos): return False
         return set(self.mut_pos) <= self.aln.aln_pos
-
-
-    def get_newick(self):
-        ''' 
-        Get newick format string for phylo edge tree.
-        '''
-
-        if self.parent ==  root_parent:
-            if not len(self.children): 
-                return nwk_str + str(self.name)
-            child_names = [c.name for c in self.children]
-            child_names.sort()
-            children_str = ', '.join([str(c) for c in child_names])
-            if str(self.name) not in re.findall(r"[\w'] + ", nwk_str):
-                nwk_str += '(' + children_str + ')' + str(self.name)
-                for child in self.children:
-                    nwk_str = child.get_newick(nwk_str)
-                else:
-                    for child in self.children:
-                        nwk_str = child.get_newick(nwk_str)
-        
-        if not len(self.children): return nwk_str
-
-        possible_strings = ['(' + str(self.name) + ')']
-        possible_strings  +=  ['(' + str(self.name) + ', ']
-        possible_strings  +=  [', ' + str(self.name) + ', ']
-        possible_strings  +=  [', ' + str(self.name) + ')']
-
-        child_names = sorted([c.name for c in self.children])
-        children_str = ', '.join([str(c) for c in child_names])
-
-        for p_str in possible_strings:
-            if p_str in nwk_str:
-                nwk_str = nwk_str.replace(p_str, 
-                                          p_str[0] + '(' + children_str + ')' +  \
-                                          str(self.name) + p_str[_1])
-                break
-
-            ordered_children = sorted(self.children, key = lambda c: c.name)
-
-            for child in ordered_children:
-                nwk_str = child.get_newick(nwk_str)
-
-        return nwk_str
-
 
     def __repr__(self):
         to_print = [self.name, 'mutations: ' + ';'.join(self.muts), 
