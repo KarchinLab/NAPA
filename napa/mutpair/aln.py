@@ -65,16 +65,21 @@ class AlnMutPair(object):
                         - self.mut_pair[0].seqs \
                         - self.mut_pair[1].seqs)
 
-        self.contingency_table = [[occur01, occur0], [occur1, occur_other]]
+        self.contingency_table = [[occur01, occur0], 
+                                  [occur1, occur_other]]
         self.num_seqs = len(all_seqs)
 
 
-    def get_jaccard_weight(self, min_co_occur = 0):
-        ''' Jaccard weight with 
+    def get_jaccard_weight(self, min_co_occur = 2):
+        ''' 
+        Jaccard weight with 
         1. minimum requirement for coocurrence count
         2. if no minimum is set, introduce correction for pairs 
-        of muts occurring only once, and only together in one seq.'''
-        [[occur01, occur0], [occur1, occur_other]] = self.contingency_table
+        of muts occurring only once, and only together in one seq.
+        '''
+        [[occur01, occur0], [occur1, occur_other]] = \
+                                                self.contingency_table
+        
         if min_co_occur == 0:
             self.jaccard = (float(occur01) - 1./self.num_seqs) / \
                             (float(occur01 + occur0 + occur1))            
@@ -194,20 +199,28 @@ class AlnMutPairSet(object):
                 if mut_str_pair not in self.mut_pair_to_obj:
                     self.mut_pair_to_obj[mut_str_pair] = \
                         AlnMutPair(seqs = set([seqid]), 
-                                   mut_pair = (self.mut_str_to_obj[mut_str_pair[0]],
-                                               self.mut_str_to_obj[mut_str_pair[1]]))
+                                   mut_pair = \
+                                   (self.mut_str_to_obj[mut_str_pair[0]],
+                                    self.mut_str_to_obj[mut_str_pair[1]]))
                 else:
                     self.mut_pair_to_obj[mut_str_pair].add_seq(seqid)
 
         # get contingency table for mutation pair stats
         for mut_pair in self.mut_pair_to_obj:
-            self.mut_pair_to_obj[mut_pair].get_contingency_table(all_seqs = \
-                                           set(self.aln.seqid_to_mut.keys()))
+            self.mut_pair_to_obj[mut_pair].get_contingency_table(\
+                            all_seqs = set(self.aln.seqid_to_mut.keys()))
                         
 
 
-    def write_jaccard_weights_table(self, min_co_occur = 0):
-        out_str = '\t'.join(['_Mut1_', '_Mut2_', 'Num_sequences_co-occur', 
+    def write_jaccard_weights_table(self, min_co_occur = 2):
+        '''
+        Prints a table of all co-occurring mutations with occurrence 
+        count of 2 or more sequences. 
+        Columns: Each mutation in pair, number of co-occurrences,
+        contingency table (for Fisher's exact) and Jaccard Index.
+        '''
+        out_str = '\t'.join(['_Mut1_', '_Mut2_', 
+                             'Num_sequences_co-occur', 
                              'Contingency_Tab(common_1_2_other)',
                              'Jaccard_index']) + '\n'
         
@@ -228,12 +241,14 @@ class AlnMutPairSet(object):
 
         return out_str
                                          
-    def write_jaccard_weights_network(self, min_co_occur = 0):
-        #MCR - Remove header to have network file same as the one from phylo_mut_pairs
-        #out_str = '\t'.join(['Source', 'Target', 'weight']) + '\n'
-        out_str = '';
+    def write_jaccard_weights_network(self, min_co_occur = 2):
+        '''
+        Outputs Jaccard Index weighted mutation pairs from
+        the alignment into a tab-delimited network format.
+        Columns: source_node  target_node Jaccard_weight
+        '''
         
-
+        out_str = ''
         for mut_str_pair in self.mut_pair_to_obj:
             aln_mut_pair = self.mut_pair_to_obj[mut_str_pair]
             aln_mut_pair.get_jaccard_weight(min_co_occur = min_co_occur)
@@ -241,7 +256,7 @@ class AlnMutPairSet(object):
             if aln_mut_pair.jaccard == 0.:
                 continue
 
-            out_str += str(aln_mut_pair) + '\t' + str(aln_mut_pair.jaccard) + '\n'
+            out_str += '%s\t%.6f\n' % (aln_mut_pair, aln_mut_pair.jaccard)
 
         return out_str
 
@@ -263,11 +278,12 @@ class AlnMutPairSet(object):
 
     def print_stats(self):
 
-        stderr_write(['Alignment depth and length:', self.aln.depth, self.aln.length])
+        stderr_write(['Alignment depth and length:', 
+                      self.aln.depth, self.aln.length])
 
-        stderr_write(["Total positions considered:", len(self.aln.aln_pos)])
+        stderr_write(["Total positions considered:", 
+                      len(self.aln.aln_pos)])
                      
         stderr_write(["Number of functional mutation pairs", 
                       len(self.mut_pair_to_obj)])
-
 
