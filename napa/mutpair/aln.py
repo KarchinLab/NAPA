@@ -4,7 +4,7 @@ from collections import defaultdict
 from scipy import stats
 
 from napa.utils.general import *
-from napa.seq.BioSeq import *
+from napa.seq.bioseq import *
 
 
 class AlnMut(object):
