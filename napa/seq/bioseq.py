@@ -12,10 +12,11 @@ class BioSeq(object):
                  seq_str = '', 
                  seq_type = '', 
                  seq_pos_list = [],
+                 pos_subset = [],
                  seq_annot = {'':['']}):
 
-        self.seq_id = seq_id
-        self.seq_str = seq_str
+        self.seq_id = str(seq_id)
+        self.seq_str = str(seq_str)
         self.length = len(self.seq_str)
 
         if len(seq_type): 
@@ -23,36 +24,45 @@ class BioSeq(object):
         else:
             self.determine_seq_type(seq_str)
 
-        self.assign_standard_chars()
-        self.get_seq_pos(seq_pos_list)
+        self.assign_standard_chars()        
+        self.get_seq_pos(seq_pos_list, pos_subset)
         self.seq_annot = seq_annot
 
 
     def __repr__(self):
-        return '\t'.join([str(el) for el in \
-                          [self.seq_id, self.seq_str, 
-                          self.seq_type, 
-                           str(self.seq_annot)]])
+        return '%s\t%s\t%s\t%s' % (self.seq_id, self.seq_str, 
+                                   self.seq_type, self.seq_annot)
 
 
     def add_annot(self, annot_dict):
+        '''
+        Add sequence annotation in the form of dictionary
+        key == property or feature, 
+        value == value of that feature for this sequence
+        '''
         self.seq_annot.update(annot_dict)
 
 
-    def get_seq_pos(self, seq_pos_list):
+    def get_seq_pos(self, seq_pos_list, pos_subset):
         '''
         Number alignment columns. 
         If no column numbers provided, start at 1.
         '''
         if not len(seq_pos_list):
             self.seq_pos_list = range(1, len(self.seq_str)+1)
-        else:
-            assert (len(seq_pos_list) == self.length), \
-                'Lengths of sequence string and sequence position list ' + \
-                'do not match: ' + \
-                ' '.join([str(el) for el in [self.seq_id, self.length, 
-                                             len(seq_pos_list)]])
+        elif len(seq_pos_list) == self.length:
             self.seq_pos_list = seq_pos_list
+        elif len(seq_pos_list) < self.length:
+            if len(pos_subset) == len(seq_pos_list):
+                self.seq_pos_list = range(1, len(self.seq_str)+1)
+            else:
+                raise ValueError('Could not assign sequence positions')
+        else:
+            self.seq_pos_list = [seq_pos_list[i] \
+                                 for i in range(len(self.length))]
+
+        self.extract_pos(pos_subset)
+
 
 
     def extract_pos(self, pos_subset):
@@ -72,13 +82,19 @@ class BioSeq(object):
 
 
     def determine_seq_type(self, seq_str):
+        '''
+        Based on characters,
+        find if sequence is DNA/RNA/Protein
+        '''
         seq_char_set =  set(list(seq_str))
-        if seq_char_set <= set(list('ATGC')):
-            self.seq_type = 'DNA'
-        elif seq_char_set <= set(list('AUGC')):
-            self.seq_type = 'RNA'
-        elif seq_char_set <= set(list('ACDEFGHIKLMNPQRSTVWY')):
+        if 'O' in seq_char_set or 'J' in seq_char_set:
+            self.seq_type = 'unknown'
+        elif seq_char_set <= set('ACDEFGHIKLMNPQRSTVWY.*-BZX'):
             self.seq_type = 'Protein'
+        elif seq_char_set <= set('ATGC'+'RYKMSW'+'BDHVN.-'):
+            self.seq_type = 'DNA'
+        elif seq_char_set <= set('AUGC'+'IYRWSKM'+'BDHVN.-'):
+            self.seq_type = 'RNA'
         else:
             self.seq_type = 'unknown'
         assert (self.seq_type in ['DNA','RNA','Protein']), \
@@ -103,21 +119,28 @@ class BioSeq(object):
         if self.length != other.length or \
            self.seq_pos_list != other.seq_pos_list:
             stderr_write(['Need to align sequences before comparing'])
-            return
+            stderr_write([self.seq_id, 'length:', self.length, '\n',
+                          other.seq_id, 'length:', other.length])
+            raise ValueError('Trying to extract mutations between' + \
+                             'unaligned sequences!') 
 
         if self.seq_type != other.seq_type:
             stderr_write(['Sequences have different sequence types!\n',
                           'Please make sure ',
-                          'they are both DNA/RNA/Protein.\n'])
-            stderr_write(['Can\'t compare sequences with IDS:', 
-                          self.seq_id, 'and', other.seq_id])
+                          'they are both DNA/RNA/Protein.'])
+            stderr_write(['Cannot compare sequences with IDs:', 
+                          self.seq_id, 'and', other.seq_id,
+                          'have types', self.seq_type, 'and',
+                          other.seq_type, 'respectively.'])
             return 
 
+        # only compare same sequence types and the 
+        # standard, unambiguous characters
         mut_list = []
         for i in range(self.length):
             if self.seq_str[i] != other.seq_str[i]:
                 if self.seq_str[i] in self.standard_chars and \
-                   other.seq_str[i] in self.standard_chars:
+                   other.seq_str[i] in other.standard_chars:
                     pos = str(self.seq_pos_list[i])
                     mut_list.append(self.seq_str[i] + pos + \
                                     other.seq_str[i])
@@ -217,7 +240,6 @@ class BioSeqAln(object):
                                 {annot_key: aln_seqid_to_annot[seqid]})
 
 
-
     def subset_aln_pos(self, pos_subset = []):
         if not len(pos_subset):
             return # No subsetting of columns
@@ -225,7 +247,6 @@ class BioSeqAln(object):
             self.seqid_to_seq[seqid].extract_pos(pos_subset)
         self.aln_pos = pos_subset
         self.length = len(pos_subset)
-
 
 
     def seqids_with_annot(self, annot_key, annot_list):
@@ -237,7 +258,6 @@ class BioSeqAln(object):
                in annot_list:
                 seqid_annot.append(seqid)
         return seqid_annot
-
 
                                                          
     def subset_annot_seq_dict(self,sel_annot_key = 'function', 

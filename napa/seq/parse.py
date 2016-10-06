@@ -1,5 +1,7 @@
+import os
 from itertools import groupby
 import re
+
 
 def fasta_iter(fasta_name):
     '''
@@ -19,9 +21,11 @@ def fasta_to_dict(fasta_input_name):
     ''' Reads: Fasta-formatted sequence file.
     Returns dictionary: {fasta_id: sequence_string}
     '''
-    fasta_sequences = fasta_iter(fasta_input_name)
-    id_sequence_dict = {}
-    for fs in fasta_sequences:
-        id_sequence_dict[fs[0]]=fs[1]
-    return id_sequence_dict
-
+    if os.path.isfile(fasta_input_name):
+        fasta_sequences = fasta_iter(fasta_input_name)
+        id_sequence_dict = {}
+        for fs in fasta_sequences:
+            id_sequence_dict[fs[0]]=fs[1]
+        return id_sequence_dict
+    else:
+        return {}

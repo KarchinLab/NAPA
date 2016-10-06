@@ -3,8 +3,9 @@ import sys
 import itertools
 import sys
 
-from napa.utils.general import *
-from napa.mutpair.aln import * # Netw. construct from alignment
+from napa.seq.parse import *
+from napa.utils.general import * #General parsing
+from napa.mutpair.aln import * # Network construct from alignment
 
 
 def parse_args():
@@ -49,6 +50,10 @@ def parse_args():
         parser.add_argument('-nf', dest = 'netFile', required = True, 
                             help = 'Outputfile for result network.')
 
+        parser.add_argument('-tf', dest = 'tableFile', required = False,
+                            default = '',
+                            help = 'Outputfile for weights table.')
+
         args = parser.parse_args()
 
 
@@ -63,6 +68,15 @@ class AlnNetInput(object):
                 List of positions/column numbers in alignment
                 If not provided, positions start with 1,2..alignment_length
                 '''
+                if os.path.isfile(args.wtId):
+                        self.wt_dict = fasta_to_dict(args.wtId)
+                        if len(self.wt_dict):
+                                self.wt_id = self.wt_dict.keys()[0]
+                                self.wt_seq = self.wt_dict[self.wt_id]
+                else:
+                        self.wt_id = args.wtId
+                        self.wt_seq = ''
+
                 if len(args.posList) == 0:
                         self.pos_list = []
                 else:
@@ -102,7 +116,8 @@ def main():
     inp = AlnNetInput(args)
     alnMutPairSet = AlnMutPairSet(aln_fasta_file = args.alnFASTA,
                                   aln_pos = inp.pos_list,
-                                  wt_id = args.wtId,
+                                  wt_id = inp.wt_id,
+                                  wt_seq_str = inp.wt_seq, 
                                   pos_subset = inp.pos_subset, 
                                   seqid_to_prot_func = \
                                   inp.seqid_to_prot_func,
@@ -111,6 +126,13 @@ def main():
     with open(args.netFile, 'wb') as f:
         f.write(alnMutPairSet.write_jaccard_weights_network(\
                                                 min_co_occur = 2))
+    
+
+    if len(args.tableFile):
+        with open(args.tableFile, 'wb') as f:
+                f.write(alnMutPairSet.write_jaccard_weights_table(\
+                                                min_co_occur = 2))
+        
     
 if __name__ == '__main__': main()
 

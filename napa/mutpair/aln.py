@@ -6,18 +6,26 @@ from scipy import stats
 from napa.utils.general import *
 from napa.seq.bioseq import *
 
+def add_seq_id_to_set(seq_id, curr_set):
+    '''
+    expands current set with a (str of) single 
+    sequence id or or a (listlike of) multiple
+    ids
+    '''
+    if not isinstance(seq_id, basestring):
+        curr_set.update(set(seq_id))
+    else:
+        curr_set.add(seq_id)
+    return curr_set
 
 class AlnMut(object):
 
     def __init__(self, seqs=set(), mut_str = None):
         self.mut_str = mut_str
-        self.seqs = set(seqs)
+        self.seqs = add_seq_id_to_set(seqs, set())
     
     def add_seq(self,seq):
-        self.seqs.add(seq) 
-    
-    def add_seqs(self,seqs):
-        self.seqs.update(seqs)
+        self.seqs = add_seq_id_to_set(seq, self.seqs)
 
     def __repr__(self):
         return self.mut_str
@@ -25,32 +33,37 @@ class AlnMut(object):
 
 class AlnMutPair(object):
     '''
-    Pair of muts from seq alignment.
+    Pair of mutations from seq alignment.
     '''
     def __init__(self, seqs = set(), mut_pair = None):
 
-        # Unique set of seqs containing mut
+        # Unique set of seqs containing mutation
         if not len(seqs):
-            raise ValueError("No seqs associated with mut pair.")
+            raise ValueError("No sequences or empty sequence IDs"+ \
+                             "associated with mut pair.")
         else:
-            self.seqs = set(seqs)
+            if not isinstance(seqs, basestring):
+                self.seqs = set(seqs)
+            else:
+                self.seqs = set([seqs])
 
         if not mut_pair:
-            raise ValueError("No muts given for mut pair")
+            raise ValueError("No mutations given for mutation pair")
         else:
             # Mutations in mut_pair should be AlnMut instances
             self.mut_pair = mut_pair 
 
+
     def __repr__(self):
         return '%s\t%s'%(str(self.mut_pair[0]), str(self.mut_pair[1])) 
 
-    def add_seq(self, seq):
-        self.seqs.update(seq) 
-
+    def add_seq(self,seq):
+        self.seqs = add_seq_id_to_set(seq, self.seqs)
 
     def get_contingency_table(self, all_seqs):
-        ''' Contingency table of occurrence counts of muts
-        individually or together. 
+        ''' 
+        Contingency table of occurrence counts of
+        mutations, occurring individually and together. 
         Occurrence count = number of seqs containing mut.
         '''
 
@@ -91,7 +104,8 @@ class AlnMutPair(object):
 
 
     def get_fisher_pval_weight(self):
-        ''' Unlike Jaccard, the smaller the p-value, 
+        ''' 
+        Unlike Jaccard, the smaller the p-value, 
         the greater the association '''
         self.odds_ratio_less, self.p_val_less = \
                         stats.fisher_exact(self.contingency_table, 
@@ -130,8 +144,7 @@ class AlnMutPairSet(object):
         # Get mutations from ancestral/wt sequence 
         # for each sequence in alignment
         # option to focus on subset of aln. positions
-        self.get_wt_seq(wt_id, wt_seq_str)
-        self.wt_seq.extract_pos(pos_subset)
+        self.get_wt_seq(wt_id, wt_seq_str, aln_pos, pos_subset)
 
 
         #Pick out sequences with selected function of interest
@@ -146,51 +159,58 @@ class AlnMutPairSet(object):
         # Get all possible mut pairs in alignment, 
         #given selected function
         self.get_aln_mut_pairs()
-        self.print_stats()
+        self.print_stats(aln_pos = aln_pos, pos_subset = pos_subset)
 
     
-    def get_wt_seq(self, wt_id, wt_seq_str):
+    def get_wt_seq(self, wt_id, wt_seq_str, aln_pos, pos_subset):
         '''
         Obtain WT/ancestral sequence to which all other sequences in 
         the alignment should be compared. Can provide id+sequence,
         or the id of a sequence already in the alignment.
+        If sequence is not in alignment, sequence needs to still be
+        aligned to it. No checking or alignment is done.
         '''
-        if len(wt_id) and len(wt_seq_str) == self.aln.length:
+        wt_id = wt_id if len(wt_id.strip()) else 'Wild_type'
+        
+        if len(wt_seq_str) == self.aln.length:
             self.wt_seq = BioSeq(seq_id = wt_id, seq_str = wt_seq_str,
                                  seq_type = 'Protein', 
-                                 seq_pos_list = self.aln_pos)
-        elif len(wt_id) and len(wt_seq_str) != self.aln.length:
-            if wt_id in self.aln.seqid_to_seq:
-                stderr_write(['AlnMutPairSet WARNING:',
-                              'Sequence length does not match alignment,',
-                              'but sequence id in alignment. Replacing',
-                              'with corresp. alignment sequence.'])
+                                 seq_pos_list = aln_pos)
+        else:
+            #make sure wt sequence is trimmed to 
+            #the subset of positions (if any)
+            #before rejecting due to length mismatch
+            if len(pos_subset) and \
+               self.aln.length == len(pos_subset) and \
+               len(wt_seq_str) >= len(pos_subset):
+                self.wt_seq = BioSeq(seq_id = wt_id, seq_str = wt_seq_str,
+                                     seq_type = 'Protein', 
+                                     seq_pos_list = self.aln.aln_pos, 
+                                     pos_subset = pos_subset)
+            elif wt_id in self.aln.seqid_to_seq:
+                if wt_seq_str.strip() != '':
+                    stderr_write(['WARNING (AlnMutPairSet):',
+                                  'Input wild type sequence length ',
+                                  'does not match alignment length, ',
+                                  'but sequence id is in alignment. Replacing',
+                                  'with corresp. alignment sequence.'])
                 self.wt_seq = self.aln.seqid_to_seq[wt_id]
             else:
-                stderr_write(['Invalid  input for WT sequence.',
-                              'Please enter valid id already in alignment.',
-                               'or a new sequence.'])
-                              
-        elif not len(wt_id) and len(wt_seq_str) == self.aln.length:
-            self.wt_seq = BioSeq(seq_id = 'Wild_type', 
-                                 seq_str = wt_seq_str,
-                                 seq_type = 'Protein', 
-                                 seq_pos_list = self.aln_pos)
-
-        else:
-            stderr_write(['Invalid  input for WT sequence.',
-                          'Please enter valid id already in alignment.',
-                          'or a new sequence.'])
+                raise ValueError(['ERROR: Invalid  input for WT sequence.',
+                         '\nPlease enter a valid ID already in alignment, '
+                         '\n OR a new ID with sequence that aligns to the '
+                         'alignment (or its position subset).'])
         
     def get_aln_mut_pairs(self):
         ''' Extract pairs of mutations occurring in at least one seq.'''
 
         self.mut_str_to_obj, self.mut_pair_to_obj = {}, {}
+
         for seqid in self.aln.seqid_to_mut:
             for mut_str in self.aln.seqid_to_mut[seqid]:
                 if mut_str not in self.mut_str_to_obj:
                     self.mut_str_to_obj[mut_str] = \
-                            AlnMut(seqs = set([seqid]), 
+                            AlnMut(seqs = seqid, 
                                    mut_str = mut_str)
                 else:
                     self.mut_str_to_obj[mut_str].add_seq(seqid)
@@ -198,8 +218,7 @@ class AlnMutPairSet(object):
             for mut_str_pair in list_pairs(self.aln.seqid_to_mut[seqid]):
                 if mut_str_pair not in self.mut_pair_to_obj:
                     self.mut_pair_to_obj[mut_str_pair] = \
-                        AlnMutPair(seqs = set([seqid]), 
-                                   mut_pair = \
+                        AlnMutPair(seqs = seqid, mut_pair = \
                                    (self.mut_str_to_obj[mut_str_pair[0]],
                                     self.mut_str_to_obj[mut_str_pair[1]]))
                 else:
@@ -210,7 +229,6 @@ class AlnMutPairSet(object):
             self.mut_pair_to_obj[mut_pair].get_contingency_table(\
                             all_seqs = set(self.aln.seqid_to_mut.keys()))
                         
-
 
     def write_jaccard_weights_table(self, min_co_occur = 2):
         '''
@@ -232,14 +250,15 @@ class AlnMutPairSet(object):
             if aln_mut_pair.jaccard == 0.:
                 continue
 
-            to_print = [str(aln_mut_pair)]
-            to_print.append(str(len(aln_mut_pair.seqs)))
-            to_print.append(str(aln_mut_pair.contingency_table))
-            to_print.append(str(aln_mut_pair.jaccard))
-
-            out_str +=  '\t'.join(to_print) + '\n'
+            out_str += '%s\t%.6f\t%s\t%d\t%s\n' % \
+                       (str(aln_mut_pair),
+                        aln_mut_pair.jaccard,
+                        str(aln_mut_pair.contingency_table),
+                        len(aln_mut_pair.seqs),
+                        ';'.join(sorted(list(aln_mut_pair.seqs))))
 
         return out_str
+
                                          
     def write_jaccard_weights_network(self, min_co_occur = 2):
         '''
@@ -276,14 +295,9 @@ class AlnMutPairSet(object):
         return out_str
 
 
-    def print_stats(self):
-
-        stderr_write(['Alignment depth and length:', 
-                      self.aln.depth, self.aln.length])
-
-        stderr_write(["Total positions considered:", 
-                      len(self.aln.aln_pos)])
-                     
-        stderr_write(["Number of functional mutation pairs", 
-                      len(self.mut_pair_to_obj)])
+    def print_stats(self, aln_pos = [], pos_subset = []):
+        length = max(len(aln_pos), self.aln.length)
+        stderr_write([self.aln.depth, length, '(alignment depth and length).'])
+        stderr_write([len(self.aln.aln_pos), "total positions considered for network."])
+        stderr_write([len(self.mut_pair_to_obj), "functional mutation pairs in network."])
 
