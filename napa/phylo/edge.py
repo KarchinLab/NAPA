@@ -1,7 +1,10 @@
 #! /usr/bin/env python 
 
 from ete2 import PhyloTree
-from napa.seq.BioSeq import *
+from napa.seq.bioseq import *
+
+from napa.utils.serials import * 
+from napa.utils.io import *
 
 
 class PhyloEdge(object):
@@ -19,16 +22,19 @@ class PhyloEdge(object):
         
         # parent node in edge, a PhyloTree Object        
         self.parent_node = parent_node 
-        self.parent_node_name = "ANC" if not parent_node else parent_node.name
+        self.parent_node_name = "ANC" if not parent_node \
+                                else parent_node.name
 
         # child node in PhyloTree, representing edge target
         self.child_node = child_node
         self.child_node_name = child_node.name
 
         # name edge by parent-child names
-        self.name = '%s__%s' % (self.parent_node_name, self.child_node_name)
+        self.name = '%s__%s' % (self.parent_node_name, 
+                                self.child_node_name)
 
-        # assign BioSeq sequence objects to parent and child 
+        # assign BioSeq sequence objects
+        # to parent and child 
         self.wt_seq = wt_seq
         self.aln = aln
         self.assign_node_seqs()
@@ -36,14 +42,18 @@ class PhyloEdge(object):
         # Get mutations for all sequences in alignment
         self.aln.get_seq_muts(wt_seq = self.wt_seq)        
         
-        # Get set of mutations/mut positions along this PhyloTree edge
+        # Get set of mutations/mut positions 
+        # along this PhyloTree edge
         self.get_muts()
-        self.mut_pos = [get_int(m) for m in self.muts]
+        self.mut_pos = [get_int_substring(m) \
+                        for m in self.muts]
 
-        # parent edge = another node pair whose target = phyloEdge's source
+        # parent edge = another node pair 
+        # whose target = phyloEdge's source
         self.parent = parent 
 
-        # child edges = node pairs whose source = phyloEdge's target
+        # child edges = node pairs 
+        # whose source = phyloEdge's target
         self.get_node_children(children)
                 
         self.precs = [] 
@@ -53,12 +63,14 @@ class PhyloEdge(object):
 
     def assign_node_seqs(self):
         if self.parent_node_name in self.aln.seqid_to_seq:
-            self.parent_node_seq = self.aln.seqid_to_seq[self.parent_node_name]
+            self.parent_node_seq = \
+                self.aln.seqid_to_seq[self.parent_node_name]
         else:
             self.parent_node_seq = self.wt_seq
 
         if self.child_node_name in self.aln.seqid_to_seq:
-            self.child_node_seq = self.aln.seqid_to_seq[self.child_node_name] 
+            self.child_node_seq = \
+                self.aln.seqid_to_seq[self.child_node_name] 
         else:
             self.child_node_seq = self.wt_seq
                 
@@ -77,10 +89,10 @@ class PhyloEdge(object):
         child_node_children = self.child_node.get_children()
         for child_node_child in child_node_children:
             self.add_child(\
-                    PhyloEdge(parent_node = self.child_node,
-                              child_node = child_node_child,
-                              aln = self.aln, wt_seq = self.wt_seq,
-                              parent = self))
+                PhyloEdge(parent_node = self.child_node,
+                          child_node = child_node_child,
+                          aln = self.aln, wt_seq = self.wt_seq,
+                          parent = self))
 
 
     def build_edge_tree(self):
@@ -117,14 +129,18 @@ class PhyloEdge(object):
             np_name = p.child_node.name if p.child_node else 'ANC'
             parent_to_child_node[p_name] = np_name
 
-        most_anc_node_name = list(set(parent_to_child_node.keys()) - \
-                           set(parent_to_child_node.values()))
+        most_anc_node_name = \
+        list(set(parent_to_child_node.keys()) - \
+             set(parent_to_child_node.values()))
 
         if not(len(most_anc_node_name)): 
-            stderr_write(['No ancestor found for phylogeny edge:', self.name])
+            stderr_write(['No ancestor found for phylogeny edge:', 
+                          self.name])
 
         if len(most_anc_node_name) > 1: 
-            stderr_write(['Found multiple ancestors for phylo edge:', self.name])
+            stderr_write(['Found multiple ancestors',
+                          'for phylo edge:',
+                          self.name])
         
         curr_anc_name = most_anc_node_name[0]
         max_depth = len(set(parent_to_child_node.keys() + \
@@ -141,11 +157,13 @@ class PhyloEdge(object):
            len(self.ordered_precs)!= len(self.precs):
             print "_precs not properly ordered/found:", self.name
             print "\tparent_to_child_node", parent_to_child_node
-            print "\tordered", [p.name for p in self.ordered_precs if p!=None]
+            print "\tordered", \
+                [p.name for p in self.ordered_precs if p != None]
             print "\tunordered", [p.name for p in self.precs]
 
 
-    def get_common_precs(self, other, annot_key, annot_combinations):
+    def get_common_precs(self, other, annot_key, 
+                         annot_combinations):
         '''
         Common precursors for a two phylo edges. 
         '''
@@ -163,31 +181,42 @@ class PhyloEdge(object):
             if not len(common_prec):
                 print "No common precs for", self.name, other.name
             elif len(common_prec) > 1:
-                common_prec = [self.ordered_precs[len(common_prec)-1]]
+                common_prec = \
+                [self.ordered_precs[len(common_prec)-1]]
+        
         common_prec = list(set([p for p in common_prec \
-                                if p.check_node_seq_annot(annot_key, annot_combinations)]))
+                        if p != None and \
+                        p.check_node_seq_annot(annot_key, 
+                                            annot_combinations)]))
+        
         return common_prec
 
 
-    def get_intermediate_prec(self, prec_list, annot_key, annot_combinations):
+
+    def get_intermediate_prec(self, prec_list, annot_key, 
+                              annot_combinations):
         '''
         Intermediate edges between two phylo edges.
         '''
-        intermediates = [self] if self.check_node_seq_annot(annot_key, annot_combinations) \
+        intermediates = [self] if self.check_node_seq_annot(\
+                            annot_key, annot_combinations) \
                         else []
 
         if not len(prec_list):
-            intermediates  +=  [p for p in self.ordered_precs \
-                              if p.check_node_seq_annot(annot_key, annot_combinations)]
+            intermediates  +=  \
+            [p for p in self.ordered_precs \
+             if p.check_node_seq_annot(annot_key, 
+                                       annot_combinations)]
             return intermediates
 
         first_prec = self.ordered_precs.index(\
-                                        next((p for p in self.ordered_precs \
-                                              if p in prec_list), 
-                                             self.ordered_precs[-1]))
+            next((p for p in self.ordered_precs if p in prec_list), 
+                 self.ordered_precs[-1]))
 
-        return intermediates + [im for im in self.ordered_precs[:first_prec] \
-                                if im.check_node_seq_annot(annot_key, annot_combinations)]
+        return intermediates + \
+        [im for im in self.ordered_precs[:first_prec] \
+         if im != None and \
+         im.check_node_seq_annot(annot_key, annot_combinations)]
         
 
     def get_muts(self):
@@ -197,16 +226,20 @@ class PhyloEdge(object):
         Overlap is removed.
         '''
         self.muts = []
-        # Get mutations from a reference sequence for parent/child node
-        # Those should have been pre-calculated in self.aln from external function
-        # creating the PhyloEdge instance
+        # Get mutations from a reference sequence for parent/child 
+        # node. Those should have been pre-calculated in 
+        # self.aln from external function creating the 
+        # PhyloEdge instance
         
         parent_node_mutations, child_node_mutations = [], []
         if self.parent_node_name in self.aln.seqid_to_mut:
-            parent_node_mutations = self.aln.seqid_to_mut[self.parent_node_name]
+            parent_node_mutations = \
+                self.aln.seqid_to_mut[self.parent_node_name]
         if self.child_node_name in self.aln.seqid_to_mut:
-            child_node_mutations = self.aln.seqid_to_mut[self.child_node_name]
-        self.muts = list(set(child_node_mutations) - set(parent_node_mutations))    
+            child_node_mutations = \
+                self.aln.seqid_to_mut[self.child_node_name]
+        self.muts = list(set(child_node_mutations) - \
+                         set(parent_node_mutations))    
 
 
     def is_leaf_edge(self):
@@ -214,20 +247,31 @@ class PhyloEdge(object):
 
 
     def check_dist(self, other, dist_thresh):
-        return self.parent_node.get_distance(other.child_node) <=  dist_thresh
-
+        if dist_thresh <= 0.:
+            return True
+        elif self.parent_node:
+            return \
+                (self.parent_node.get_distance(other.child_node) \
+                 <=  dist_thresh)
+        else:
+            return True
 
     def check_node_seq_annot(self, annot_key, annot_combinations):
+        if not len(annot_combinations):
+            return True
         if annot_key not in self.parent_node_seq.seq_annot:
             return False
         if annot_key not in self.child_node_seq.seq_annot:
             return False
         
-        parent_node_annot = self.parent_node_seq.seq_annot[annot_key]
-        child_node_annot = self.child_node_seq.seq_annot[annot_key]
+        parent_node_annot = \
+                    self.parent_node_seq.seq_annot[annot_key]
+        child_node_annot = \
+                    self.child_node_seq.seq_annot[annot_key]
 
         if parent_node_annot in annot_combinations:
-            if child_node_annot in annot_combinations[parent_node_annot]:
+            if child_node_annot in \
+               annot_combinations[parent_node_annot]:
                 return True
         return False
 
@@ -238,18 +282,13 @@ class PhyloEdge(object):
 
     def __repr__(self):
         to_print = [self.name, 'mutations: ' + ';'.join(self.muts), 
-                   'children: ' + ';'.join([c.name for c in self.children]), 
-                   'followers: ' + ';'.join([f.name for f in self.followers]), 
-                   'precs: ' + ';'.join([p.name for p in self.precs])]
+                   'children: ' + \
+                    ';'.join([c.name for c in self.children]), 
+                   'followers: ' + \
+                    ';'.join([f.name for f in self.followers]), 
+                   'precs: ' + ';'.join([p.name \
+                                         for p in self.precs])]
         if len(self.ordered_precs):
-            to_print.append('ordered_prec: ' + \
-                            ';'.join([op.name \
-                                      for op in self.ordered_precs if op])) 
+            to_print.append('ordered_prec: ' + ';'.join([op.name \
+                        for op in self.ordered_precs if op])) 
         return '\n\t'.join(to_print)
-                                         
-
-
-
-        
-        
-    

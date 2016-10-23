@@ -2,7 +2,9 @@ from collections import OrderedDict
 import copy
 import re
 
-from napa.utils.general import *
+from napa.utils.serials import * 
+from napa.utils.io import *
+
 from napa.seq.parse import *
 from napa.seq.format import *
 
@@ -32,7 +34,8 @@ class BioSeq(object):
     def __repr__(self):
         return '%s\t%s\t%s\t%s' % (self.seq_id, self.seq_str, 
                                    self.seq_type, self.seq_annot)
-
+    def copy(self):
+        return copy.deepcopy(self)
 
     def add_annot(self, annot_dict):
         '''
@@ -48,20 +51,40 @@ class BioSeq(object):
         Number alignment columns. 
         If no column numbers provided, start at 1.
         '''
+        self.length = len(self.seq_str)
+
         if not len(seq_pos_list):
             self.seq_pos_list = range(1, len(self.seq_str)+1)
+
         elif len(seq_pos_list) == self.length:
             self.seq_pos_list = seq_pos_list
-        elif len(seq_pos_list) < self.length:
-            if len(pos_subset) == len(seq_pos_list):
-                self.seq_pos_list = range(1, len(self.seq_str)+1)
-            else:
-                raise ValueError('Could not assign sequence positions')
-        else:
-            self.seq_pos_list = [seq_pos_list[i] \
-                                 for i in range(len(self.length))]
 
-        self.extract_pos(pos_subset)
+        elif len(seq_pos_list) < self.length:
+            if len(pos_subset) == self.length:
+                self.seq_pos_list = pos_subset
+            elif len(pos_subset) > self.length:
+                self.seq_pos_list = [pos_subset[i] for i in \
+                                     range(self.length)]
+            else:
+                raise ValueError(' '.join(['Could not assign',
+                                'sequence positions:', 
+                                '\nSequence pos list length',
+                                str(len(seq_pos_list)), 
+                                '\ndoes not match alignment',
+                                'length,', str(self.length), 
+                                '\nor size of chosen subset', 
+                                str(len(pos_subset))]))
+
+        elif len(seq_pos_list) > self.length:
+            if len(pos_subset) == self.length:
+                self.seq_pos_list = pos_subset
+            else:
+                self.seq_pos_list = [seq_pos_list[i] \
+                                     for i in range(self.length)]
+
+        if len(pos_subset) \
+                    and len(pos_subset) < len(self.seq_pos_list):
+            self.extract_pos(pos_subset)
 
 
 
@@ -70,11 +93,12 @@ class BioSeq(object):
         If pos_subset is not empty
         update sequence and position lists to that subset
         '''
-        if len(pos_subset) > 0:
+        if len(pos_subset) > 0 and len(pos_subset) < self.length:
             seq_str = ''
             for posi, pos in enumerate(self.seq_pos_list):
                 if pos in pos_subset:
-                    seq_str += self.seq_str[posi]
+                    if posi < len(self.seq_str):
+                        seq_str += self.seq_str[posi]
             self.seq_str = seq_str
             self.seq_pos_list = copy.deepcopy(pos_subset)
 
@@ -118,14 +142,16 @@ class BioSeq(object):
 
         if self.length != other.length or \
            self.seq_pos_list != other.seq_pos_list:
-            stderr_write(['Need to align sequences before comparing'])
+            stderr_write(['Need to align sequences',
+                          'before comparing'])
             stderr_write([self.seq_id, 'length:', self.length, '\n',
                           other.seq_id, 'length:', other.length])
-            raise ValueError('Trying to extract mutations between' + \
-                             'unaligned sequences!') 
+            raise ValueError('Trying to extract mutations' + \
+                             'between unaligned sequences!') 
 
         if self.seq_type != other.seq_type:
-            stderr_write(['Sequences have different sequence types!\n',
+            stderr_write(['Sequences have different',
+                          'sequence types!\n',
                           'Please make sure ',
                           'they are both DNA/RNA/Protein.'])
             stderr_write(['Cannot compare sequences with IDs:', 
@@ -156,13 +182,16 @@ class BioSeqAln(object):
         self.seq_annot = kwargs.get('seq_annot', 
                                     {'function':'default'}) 
         self.aln_pos = kwargs.get('aln_pos', [])
+        self.orig_aln_pos = copy.deepcopy(self.aln_pos)
+        self.pos_subset = kwargs.get('pos_subset', [])
 
-        if len(kwargs.get('seqid_to_seq', {})):
+        if len(kwargs.get('seqid_to_seq', '')):
             self.seqid_to_seq = \
-                            copy.deepcopy(kwargs.get('seqid_to_seq', {}))
+                    copy.deepcopy(kwargs.get('seqid_to_seq', {}))
         
         elif len(kwargs.get('aln_fasta_file', '')):
-            self.seqs_from_fasta_file(kwargs.get('aln_fasta_file', ''))
+            self.seqs_from_fasta_file(kwargs.get('aln_fasta_file', 
+                                                 ''))
 
         
         if len(kwargs.get('annot_key', '')) and \
@@ -176,27 +205,26 @@ class BioSeqAln(object):
         if len(kwargs.get('sel_annot_key', '')) and \
             (kwargs.get('sel_annot_list', ['']) != [''] or \
             len(kwargs.get('sel_annot_file', ''))):
-            self.subset_annot_seq_dict(sel_annot_key = \
-                                       kwargs.get('sel_annot_key', ''),
-                                       sel_annot_file = \
-                                       kwargs.get('sel_annot_file', ''),
-                                       sel_annot_list = 
-                                       kwargs.get('sel_annot_list', ['']))
+            self.subset_annot_seq_dict(\
+                sel_annot_key = kwargs.get('sel_annot_key', ''),
+                sel_annot_file = kwargs.get('sel_annot_file', ''),
+                sel_annot_list = kwargs.get('sel_annot_list', ['']))
 
-        if len(kwargs.get('pos_subset', [])):
-            self.subset_aln_pos(kwargs.get('pos_subset', []))
+
+        if len(self.pos_subset):
+            self.subset_aln_pos(self.pos_subset)
 
         if not len(self.aln_pos):
             stderr_write(['WARNING (BioSeqAln):',
                          'Default alignment positions set.'])
-            self.aln_pos = \
-                self.seqid_to_seq[\
+            self.aln_pos = self.seqid_to_seq[\
                             self.seqid_to_seq.keys()[0]].seq_pos_list
 
         self.depth = len(self.seqid_to_seq)
         self.length = len(self.aln_pos)
 
-
+    def copy(self):
+        return copy.deepcopy(self)
 
     def seqs_from_fasta_file(self, aln_fasta_file):
         self.seqid_to_seq = OrderedDict()
@@ -204,17 +232,32 @@ class BioSeqAln(object):
 
 
     def add_sequences_from_file(self, aln_fasta_file):
+        # To new sequences, assign 
+        # positions in alignment before subsetting
+        # (truncating columns)
+        # Then apply the same subsetting
+        aln_pos = self.orig_aln_pos
+
         fasta_recs = fasta_iter(aln_fasta_file)
     
         for r in fasta_recs:
 
             seq_id, seq_str = r[0], r[1]
-            seq_id = re.sub('[!@#$.]|','',seq_id)
+            seq_id = re.sub('[!@#$.]|','', seq_id)
+        
+            if seq_id in self.seqid_to_seq:
+                stderr_write(['Sequence ID', seq_id, 
+                              'from FASTA file:\n',
+                              aln_fasta_file,
+                              'already in alignment.'
+                              '\nSequence will not be added!'])
+                continue
 
             self.seqid_to_seq[seq_id] = \
                     BioSeq(seq_id = seq_id, seq_str = seq_str,
                            seq_type = self.seq_type,
-                           seq_pos_list = self.aln_pos,
+                           seq_pos_list = aln_pos,
+                           pos_subset = self.pos_subset,
                            seq_annot = copy.deepcopy(self.seq_annot))
 
 
@@ -223,21 +266,24 @@ class BioSeqAln(object):
                    seqid_to_annot_file = '',
                    seqid_to_annot = {}):
         '''
-        Add sequence function class annotation to sequences in alignment.
+        Add sequence function class annotation to 
+        sequences in alignment.
         '''
         if len(seqid_to_annot_file):
-            aln_seqid_to_annot = parse_keyval_dict(seqid_to_annot_file)
+            aln_seqid_to_annot = \
+                            parse_keyval_dict(seqid_to_annot_file)
         elif len(seqid_to_annot):
             aln_seqid_to_annot = seqid_to_annot
         else:
-            stderr_write('WARNING (BioSeqAln): No functions assigned')
+            stderr_write(['WARNING (BioSeqAln):',
+                          'No functions assigned'])
             return 
 
         for seqid in aln_seqid_to_annot:
             seqid_fasta = re.sub('[!@#$.]|','', seqid)
             if seqid_fasta in self.seqid_to_seq:
                 self.seqid_to_seq[seqid_fasta].add_annot(\
-                                {annot_key: aln_seqid_to_annot[seqid]})
+                        {annot_key: aln_seqid_to_annot[seqid]})
 
 
     def subset_aln_pos(self, pos_subset = []):
@@ -291,7 +337,7 @@ class BioSeqAln(object):
         self.seqid_to_mut = OrderedDict()
         for seqid in self.seqid_to_seq:
             self.seqid_to_mut[seqid] = \
-                    wt_seq.get_substitutions(self.seqid_to_seq[seqid])
+                wt_seq.get_substitutions(self.seqid_to_seq[seqid])
 
 
     def get_seq_muts_id(self, wt_id = ''):

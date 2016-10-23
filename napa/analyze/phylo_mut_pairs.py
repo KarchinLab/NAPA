@@ -1,145 +1,109 @@
-import argparse
-import sys
-from os import listdir
-from os.path import isfile, join
-import itertools
 from collections import defaultdict
 
-from napa.utils.general import *
-from napa.mutpair.phylo import * # Netw. construct from alignment
+from napa.utils.io import *
+from napa.utils.serials import *
 
+from napa.mutpair.phylo import * 
+from napa.analyze.aln_mut_pairs import *
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('-a', dest = 'alnFASTA', required = True, 
-                        help = 'Path of multiple sequence alignment fasta file.')
-
-    parser.add_argument('-pl', dest = 'posList', required = True, 
-                        help = 'File containing protein residue positions ' + \
-                        'corresponding to each column in the alignment.')
-
-    parser.add_argument('-d', dest = 'treeDistThresh', type = float, required = True, 
-                        help = 'Maximum distance between mutations on the tree. ' + \
-                        'Mutations further appart not linked in network.')
-
-
-    parser.add_argument('-wt', dest = 'wtId', required = True,  
-                        help = 'Id of wildtype or ancestral sequence, ' + \
-                        'assuming it is already in alignment. Can also provide '+ \
-                        'separate FASTA with wildtype sequence.')
-
-    parser.add_argument('-ps', dest = 'posSubset', required = True, 
-                        help = 'File containing subset of aln/protein positions' + \
-                        'to be considered in network')
-
-    parser.add_argument('-af', dest = 'protFunc', required = True, 
-                        help = 'File containing known protein functional annot. ' + \
-                        'of sequences in alignment.')
-
-    parser.add_argument('-ft', dest = 'funcTransitions', required = True, 
-                        help = 'String/File containing allowed transitions between ' + \
-                        'protein functions in the evolution of a final function.')
-
-    parser.add_argument('-sf', dest = 'selProtFuncs', required = True, 
-                        help = 'Path of file containing the selected final function.')
-
-
-    parser.add_argument('-tl', dest = 'treeFileList', required = True,
-                        help = 'File with a list of tree files from the ensemble.')
-        
-    parser.add_argument('-is', dest = 'intSeqFileList', required = True,
-                        help = 'File with a list of fasta files where the internal' + \
-                        'node sequences are stored.')
-        
-    parser.add_argument('-if', dest = 'intFuncFileList', required = True,
-                        help = 'File with a list of fasta files where the internal' + \
-                        'node functions are stored.')
-
-    parser.add_argument('-mt', dest = 'mutPairType', type = str, required = True,
-                        help = 'The type of network: dir(ected) or undir(ected).')
-    
-    parser.add_argument('-pt', dest = 'pvalThresh', type = float, required = True,
-                        help = 'The maximum p-value for Fisher\'s exact test.' + \
-                        'Used to extract significantly associated mut. pairs.')
-    
-
-    parser.add_argument('-nf', dest = 'netFile', required = True, 
-                        help = 'Outputfile for result network.')
-
-    args = parser.parse_args()
-
-    return args
-
-
-class PhyloNetInput(object):
+class PhyloNetInput(AlnNetInput):
     '''
-    Prepare input files for alignment-based network reconstruction.
+    Prepare all inputs for phylogeny-based 
+    network reconstruction.
+    Builds on alignment inputs as provided for 
+    alingment based network and adds 
+    phylogeny specific parameters
     '''
-    def __init__(self, args):
+    def __init__(self, config):
+        # (Leaf sequence alignment inputs)
+        super(PhyloNetInput, self).__init__(config)
 
-        # List of positions/column numbers in alignment
-        # If not provided, positions start with 1,2..alignment_length
-        self.pos_list = [int(rec) for rec in parse_column(args.posList)]
-
-        # List of protein residue positions considered for network.
-        # (remove residues from signaling peptide, or other domains not studied).
-        self.pos_subset = [int(rec) for rec in parse_column(args.posSubset)]
-
-        # Functional transitions between phylogeny sequences allowed
-        # (evolution of specific function)
-        self.prot_func_transitions = parse_keyval_dict(args.funcTransitions)
-
-        # List of absolute paths for phylogenetic trees in ensemble
-        self.tree_files = parse_column(args.treeFileList)
-
-        # List of internal node sequence fasta files for each tree
-        self.int_seq_files = parse_column(args.intSeqFileList)
-
-        # List of internal node function files for each tree
-        self.int_func_files = parse_column(args.intFuncFileList)
-
-        # check we have required inputs for each tree
-        if len(self.tree_files) != len(self.int_seq_files):
-            stderr_write(['Unequal number of tree files and ',
-                          'internal node files.',
-                          'Using minimum number of files of both.'])
-
-            min_trees = min(len(self.tree_files), len(self.int_seq_files))
-            self.tree_files = self.tree_files[0:min_trees]
-            self.int_seq_files = self.int_seq_files[0:min_trees]
-
-
-def main():
-    args = parse_args()
-    inp = PhyloNetInput(args)
-    for i, (tf, isf, iff) in enumerate(zip(inp.tree_files, 
-                                           inp.int_seq_files, inp.int_func_files)):
-
-        stderr_write(['\n','Extracting mutation pairs for tree file:\n',tf])
-        # Set of mutation pairs occurring along a single tree
-        phylo_mut_pair_set = PhyloMutPairSet(leaf_fasta_file = args.alnFASTA,
-                                             int_node_fasta_file = isf,
-                                             aln_pos = inp.pos_list,
-                                             wt_id = args.wtId,
-                                             pos_subset = inp.pos_subset,
-                                             leaf_seqid_to_prot_func_file = args.protFunc,
-                                             int_seqid_to_prot_func_file = iff,
-                                             prot_func_transitions_file = args.funcTransitions,
-                                             sel_prot_func_file = args.selProtFuncs,
-                                             dist_thresh = args.treeDistThresh,
-                                             tree_nwk_file = tf,
-                                             mut_pair_type = args.mutPairType)
-        # Combined sets of mutations from all trees 
-        # The number of trees in ensemble with a significant right-tailed p-value
-        # are the weights output for each mutation pair
-        if i == 0:
-            cmb_mut_pair_set = CombinedPhyloMutPairs(phylo_mut_pair_set, args.pvalThresh)
+        # Phylogeny specific inputs
+        self.func_transitions = {}
+        if len(self.func_transitions_file):
+            self.func_transitions = \
+                parse_keyval_dict(self.func_transitions_file)
+            stderr_write(['Using', len(self.func_transitions),
+                          'functional transitions'])
         else:
-            cmb_mut_pair_set.add_mut_pairs(phylo_mut_pair_set)
+            stderr_write(['Functional transitions between',
+                          'internal node functions when',
+                          'traversing branches',
+                          'not constrained.'])
+            
+        self.get_tree_files()
 
-        
-    with open(args.netFile, 'wb') as f:
-        f.write(str(cmb_mut_pair_set))
+    def get_tree_files(self):
 
-if __name__ == '__main__': main()        
+        self.tree_files =  defaultdict(list)
+        self.int_seq_files = defaultdict(list)
+        self.int_func_files = defaultdict(list)
+
+        for prefix in self.tree_file_prefix_list:
+            prefix = os.path.join(self.working_dir,
+                                  self.data_dir, prefix)
+
+            self.tree_files[prefix] = \
+                list_display_files('Nwk trees with internal '+ \
+                                   'nodes', prefix, 
+                                self.tree_nwk_file_suffix)
+
+            self.int_seq_files[prefix] = list_display_files(\
+                'Internal node sequences', prefix, 
+                self.tree_internal_node_seq_suffix)
+
+            if hasattr(self,'tree_internal_node_state_suffix'):
+                if self.tree_internal_node_state_suffix != None:
+                    self.int_func_files[prefix] = \
+                        list_display_files('Reconstructed ' + \
+                            'functions on internalmnodes', 
+                                           prefix, 
+                            self.tree_internal_node_state_suffix)
+
+            if len(self.int_seq_files[prefix]) != \
+               len(self.tree_files[prefix]):
+                raise ValueError(\
+                    ' '.join(['PhyloNet Build Input:',
+                              'Check that each Newick tree file',
+                              'has a corresponding',
+                              'internal states file!']))
+
+            if len(self.int_func_files[prefix]):
+                if len(self.int_func_files[prefix]) != \
+                   len(self.tree_files[prefix]):
+                    raise ValueError(\
+                        ' '.join(['PhyloNet Build Input:',
+                                  'Check that each Newick tree',
+                                  'file has a corresponding', 
+                                  'internal states file!']))
+
+
+def run_phylo_mut_pairs(config):
+    '''
+    Processes network input information.
+    Generates and writes network to text file(s).
+    '''
+    inp = PhyloNetInput(config)
+
+    tree_ensemble = TreeEnsembleMutPairs(inp)
+    mut_pair_dicts = get_mut_pair_dicts(tree_ensemble)
+    tree_ensemble.assign_mut_pair_weights(mut_pair_dicts)
+    phylo_mut_pairs = tree_ensemble
+    
+    # Output network in tab-delimited format
+    # Source\tTarget\tWeight
+    stderr_write(['\nWriting network to file:\n' + inp.net_file]) 
+    phylo_mut_pairs.write_network_to_file(inp.net_file)
+
+    # outputs additional information about edge weights
+    # to a separate table
+    if to_bool(inp.output_edge_weight_table):
+        stderr_write(['\nWriting network extended network',
+                      'table to file:\n' + inp.net_table_file]) 
+        phylo_mut_pairs.write_table_to_file(inp.net_table_file)
+ 
+    # Prints basic stats for reconstructed network
+    phylo_mut_pairs.print_stats(aln_pos = inp.pos_list,
+                                 pos_subset = inp.pos_subset)
+
+

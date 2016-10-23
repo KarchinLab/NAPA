@@ -1,0 +1,67 @@
+#=========================================================#
+# Example NAPA configuration file
+#=========================================================#
+# Input and output dirs will be relative to working_dir
+# All input files will be in the input_dir
+# All output files will be in the output_dir
+working_dir: ./
+data_dir: data/
+results_dir: results/
+
+#=========================================================#
+# REQUIRED, for both construction and analysis
+#=========================================================#
+# Network type: directed vs. undirected
+edge_type: undir
+net_type: aln
+net_file_base: TEM-ext-spec
+# If left blank, name will be built from 
+# other options, using net_file_base and dirs
+net_file: 
+
+#=========================================================#
+# Network Construction - Aln and Phylo Based Networks
+#=========================================================#
+# REQ: options for network construction
+method: mod_jaccard
+thresh: 0.01
+output_edge_weight_table: yes
+#---------------------------------------------------------#
+wild_type: TEM_1
+aln_fasta_file: TEM-SHV-prot-aln.fasta
+#---------------------------------------------------------#
+# OPT: Custom numbering of protein/alignment positions
+pos_list_file: TEM-pos-list.txt
+# OPT: Selecting a subset of posion/ranges in protein
+pos_subset_file: TEM-pos-subset.txt
+# OPT: Selecting a subset of sequences by func. annot
+prot_func_file: TEM-functions.txt
+sel_prot_func_file: TEM-functions-selected.txt
+
+
+#=========================================================#
+# Network Analysis 
+#=========================================================#
+# REQ: Whether to perform clustering nodes into communities
+cluster_nodes: no
+#---------------------------------------------------------#
+# REQ: Whether to calculate node/path/relative path
+# centralities
+calculate_centralities: yes
+#---------------------------------------------------------#
+# OPT: Network unit for which centrality will be calculated
+# The path length = number of connected nodes in path
+# default is 1 (single node), when left blank
+path_len: 1
+#---------------------------------------------------------#
+# OPT: For calculating centralities
+# Calculate an 'absolute' or 'relative' (ranking) 
+# of centralities for paths with length > 1
+# default = 'absolute' when left blank or when 
+# path_len == 1
+cent_rank_type: absolute
+#---------------------------------------------------------#
+# OPT: Which types of centralities to calculate
+# Choice: ['loc','glob','both'] 
+# Default is 'loc' (local), when left blank
+cent_type: both

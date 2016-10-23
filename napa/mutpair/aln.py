@@ -3,7 +3,9 @@
 from collections import defaultdict
 from scipy import stats
 
-from napa.utils.general import *
+from napa.utils.serials import * 
+from napa.utils.io import *
+
 from napa.seq.bioseq import *
 
 def add_seq_id_to_set(seq_id, curr_set):
@@ -53,9 +55,8 @@ class AlnMutPair(object):
             # Mutations in mut_pair should be AlnMut instances
             self.mut_pair = mut_pair 
 
-
     def __repr__(self):
-        return '%s\t%s'%(str(self.mut_pair[0]), str(self.mut_pair[1])) 
+        return '%s\t%s'%(self.mut_pair[0], self.mut_pair[1])
 
     def add_seq(self,seq):
         self.seqs = add_seq_id_to_set(seq, self.seqs)
@@ -81,39 +82,50 @@ class AlnMutPair(object):
         self.contingency_table = [[occur01, occur0], 
                                   [occur1, occur_other]]
         self.num_seqs = len(all_seqs)
-
+        
 
     def get_jaccard_weight(self, min_co_occur = 2):
         ''' 
+        OBSOLETE 
         Jaccard weight with 
         1. minimum requirement for coocurrence count
         2. if no minimum is set, introduce correction for pairs 
         of muts occurring only once, and only together in one seq.
         '''
         [[occur01, occur0], [occur1, occur_other]] = \
-                                                self.contingency_table
+                    self.contingency_table
         
         if min_co_occur == 0:
             self.jaccard = (float(occur01) - 1./self.num_seqs) / \
-                            (float(occur01 + occur0 + occur1))            
+                           (float(occur01 + occur0 + occur1))
         elif occur01 < min_co_occur:
             self.jaccard = 0.
         else:
             self.jaccard = (float(occur01) - 1./self.num_seqs) / \
                             (float(occur01 + occur0 + occur1))
 
+    def get_mod_jaccard_weight(self):
+        '''
+        Modified Jaccard score based on sequence occurrence counts
+        corrected for low mutation co-occurrence counts
+        '''
+        [[num11, num10], [num01, num00]] = self.contingency_table
+        # Penalizes for small co-ocurrence num11
+        epsilon = float(num00)/(num11 + num10 + num01)
+        self.jaccard = max(0.,
+            (num11 - epsilon) / float(num11 + num01 + num10))
 
     def get_fisher_pval_weight(self):
         ''' 
         Unlike Jaccard, the smaller the p-value, 
         the greater the association '''
-        self.odds_ratio_less, self.p_val_less = \
-                        stats.fisher_exact(self.contingency_table, 
-                                           alternative = 'less')
+        self.odds_ratio_less, self.pval_less = \
+        stats.fisher_exact(self.contingency_table, 
+                           alternative = 'less')
 
-        self.odds_ratio_more, self.p_val_more = \
-                        stats.fisher_exact(self.contingency_table, 
-                                           alternative = 'greater')
+        self.odds_ratio_more, self.pval_more = \
+        stats.fisher_exact(self.contingency_table, 
+                           alternative = 'greater')
 
 
 
@@ -121,183 +133,141 @@ class AlnMutPairSet(object):
     '''
     Set of mut pairs and associated metrics from an MSA.
     '''
-    def __init__(self, aln_fasta_file = '', aln_pos = [], 
-                 wt_seq_str = '', wt_id = '', pos_subset = [],
-                 seqid_to_prot_func = {'':''}, 
-                 seqid_to_prot_func_file = '',
-                 sel_prot_func = [''], 
-                 sel_prot_func_file = ''):
+    def __init__(self, inp):
+        self.__dict__.update(vars(inp))
 
-        # Alignment from input fasta file
-        # Do not select sequences by function yet
-        # (that would remove the WT/reference sequence from set
-        self.aln = BioSeqAln(aln_fasta_file = aln_fasta_file,
-                             aln_pos = aln_pos, 
-                             pos_subset = pos_subset,
-                             annot_key = 'function',
-                             seqid_to_annot = seqid_to_prot_func, 
-                             seqid_to_annot_file = seqid_to_prot_func_file,
-                             sel_annot_key = '', 
-                             sel_annot_list = [''],
-                             sel_annot_file = '')
-
-        # Get mutations from ancestral/wt sequence 
-        # for each sequence in alignment
-        # option to focus on subset of aln. positions
-        self.get_wt_seq(wt_id, wt_seq_str, aln_pos, pos_subset)
-
-
-        #Pick out sequences with selected function of interest
-        #(Alignment may consist of sequences with different annotations)
-        self.aln.subset_annot_seq_dict(sel_annot_key = 'function',
-                                       sel_annot_list = sel_prot_func,
-                                       sel_annot_file = sel_prot_func_file)
+        # Pick out sequences with selected function of interest
+        # (Alignment may consist of sequences with different 
+        # annotations)
+        self.aln.subset_annot_seq_dict(\
+            sel_annot_key = 'function', 
+            sel_annot_list = self.sel_prot_func)
 
         self.aln.get_seq_muts(self.wt_seq)
-        # stderr_write([self.aln_func.seqid_to_mut])
 
         # Get all possible mut pairs in alignment, 
         #given selected function
         self.get_aln_mut_pairs()
-        self.print_stats(aln_pos = aln_pos, pos_subset = pos_subset)
 
+    def __repr__(self):
+        out_str = ''
+        for mp in self.mut_pair_to_obj:
+            
+            mut_pair = self.mut_pair_to_obj[mp]
     
-    def get_wt_seq(self, wt_id, wt_seq_str, aln_pos, pos_subset):
-        '''
-        Obtain WT/ancestral sequence to which all other sequences in 
-        the alignment should be compared. Can provide id+sequence,
-        or the id of a sequence already in the alignment.
-        If sequence is not in alignment, sequence needs to still be
-        aligned to it. No checking or alignment is done.
-        '''
-        wt_id = wt_id if len(wt_id.strip()) else 'Wild_type'
-        
-        if len(wt_seq_str) == self.aln.length:
-            self.wt_seq = BioSeq(seq_id = wt_id, seq_str = wt_seq_str,
-                                 seq_type = 'Protein', 
-                                 seq_pos_list = aln_pos)
-        else:
-            #make sure wt sequence is trimmed to 
-            #the subset of positions (if any)
-            #before rejecting due to length mismatch
-            if len(pos_subset) and \
-               self.aln.length == len(pos_subset) and \
-               len(wt_seq_str) >= len(pos_subset):
-                self.wt_seq = BioSeq(seq_id = wt_id, seq_str = wt_seq_str,
-                                     seq_type = 'Protein', 
-                                     seq_pos_list = self.aln.aln_pos, 
-                                     pos_subset = pos_subset)
-            elif wt_id in self.aln.seqid_to_seq:
-                if wt_seq_str.strip() != '':
-                    stderr_write(['WARNING (AlnMutPairSet):',
-                                  'Input wild type sequence length ',
-                                  'does not match alignment length, ',
-                                  'but sequence id is in alignment. Replacing',
-                                  'with corresp. alignment sequence.'])
-                self.wt_seq = self.aln.seqid_to_seq[wt_id]
-            else:
-                raise ValueError(['ERROR: Invalid  input for WT sequence.',
-                         '\nPlease enter a valid ID already in alignment, '
-                         '\n OR a new ID with sequence that aligns to the '
-                         'alignment (or its position subset).'])
-        
+            if 'jaccard' in self.method.lower(): 
+                if mut_pair.jaccard < self.thresh:
+                    continue
+
+                out_str += \
+                '%s\t%.6f\n' % (mut_pair, 
+                                mut_pair.jaccard)
+
+            elif 'fisher' in self.method.lower(): 
+                if mut_pair.pval_more > self.thresh:
+                    continue
+
+                out_str += \
+                '%s\t%.6f\n' % (mut_pair, 
+                                mut_pair.pval_more)
+
+        return out_str
+
     def get_aln_mut_pairs(self):
-        ''' Extract pairs of mutations occurring in at least one seq.'''
+        ''' 
+        Extract pairs of mutations occurring 
+        in at least one seq.
+        '''
 
         self.mut_str_to_obj, self.mut_pair_to_obj = {}, {}
 
         for seqid in self.aln.seqid_to_mut:
-            for mut_str in self.aln.seqid_to_mut[seqid]:
-                if mut_str not in self.mut_str_to_obj:
-                    self.mut_str_to_obj[mut_str] = \
-                            AlnMut(seqs = seqid, 
-                                   mut_str = mut_str)
+            
+            for m in self.aln.seqid_to_mut[seqid]:
+                if m not in self.mut_str_to_obj:
+                    self.mut_str_to_obj[m] = \
+                        AlnMut(seqs = seqid, mut_str = m)
                 else:
-                    self.mut_str_to_obj[mut_str].add_seq(seqid)
+                    self.mut_str_to_obj[m].add_seq(seqid)
 
-            for mut_str_pair in list_pairs(self.aln.seqid_to_mut[seqid]):
-                if mut_str_pair not in self.mut_pair_to_obj:
-                    self.mut_pair_to_obj[mut_str_pair] = \
-                        AlnMutPair(seqs = seqid, mut_pair = \
-                                   (self.mut_str_to_obj[mut_str_pair[0]],
-                                    self.mut_str_to_obj[mut_str_pair[1]]))
+            for mp in \
+                list_pairs(self.aln.seqid_to_mut[seqid]):
+                if mp not in self.mut_pair_to_obj:
+                    self.mut_pair_to_obj[mp] = \
+                    AlnMutPair(seqs = seqid, 
+                               mut_pair = \
+                            (self.mut_str_to_obj[mp[0]],
+                             self.mut_str_to_obj[mp[1]]))
                 else:
-                    self.mut_pair_to_obj[mut_str_pair].add_seq(seqid)
+                    self.mut_pair_to_obj[mp].add_seq(seqid)
 
-        # get contingency table for mutation pair stats
-        for mut_pair in self.mut_pair_to_obj:
-            self.mut_pair_to_obj[mut_pair].get_contingency_table(\
-                            all_seqs = set(self.aln.seqid_to_mut.keys()))
-                        
+        # get contingency tables and network weights 
+        # for pairs of co-occurring mutations
+        all_seqs = set(self.aln.seqid_to_mut.keys())
 
-    def write_jaccard_weights_table(self, min_co_occur = 2):
+        for mp in self.mut_pair_to_obj:
+           
+            mut_pair = self.mut_pair_to_obj[mp]
+            
+            mut_pair.get_contingency_table(all_seqs = all_seqs)
+            
+            if 'jaccard' in self.method.lower():
+                mut_pair.get_mod_jaccard_weight()
+            elif 'fisher' in self.method.lower():
+                mut_pair.get_fisher_pval_weight()
+            
+
+    def write_network_to_file(self, file_path):
         '''
-        Prints a table of all co-occurring mutations with occurrence 
-        count of 2 or more sequences. 
+        Writes network to file with path file_path
+        Columns: source_node  target_node  weight
+        '''
+        with open(file_path, 'wb') as f:
+            f.write(str(self))      
+                    
+
+    def write_table_to_file(self, file_path):
+        '''
+        Prints a table of all co-occurring mutations.
         Columns: Each mutation in pair, number of co-occurrences,
         contingency table (for Fisher's exact) and Jaccard Index.
         '''
-        out_str = '\t'.join(['_Mut1_', '_Mut2_', 
-                             'Num_sequences_co-occur', 
-                             'Contingency_Tab(common_1_2_other)',
-                             'Jaccard_index']) + '\n'
-        
+        with open(file_path, 'wb') as f:
+            f.write('\t'.join(\
+                ['Mut1', 'Mut2', 'Weight' + str(self.method),
+                 'Contingency_Table', 'Co-occur_Count', 
+                 'weight_' + str(self.method)]) + '\n')
+                    
+            for mp in self.mut_pair_to_obj:
+                mut_pair = self.mut_pair_to_obj[mp]
 
-        for mut_str_pair in self.mut_pair_to_obj:
-            aln_mut_pair = self.mut_pair_to_obj[mut_str_pair]
-            aln_mut_pair.get_jaccard_weight(min_co_occur = min_co_occur)
+                if 'jaccard' in self.method.lower():
+                    weight = mut_pair.jaccard
 
-            if aln_mut_pair.jaccard == 0.:
-                continue
-
-            out_str += '%s\t%.6f\t%s\t%d\t%s\n' % \
-                       (str(aln_mut_pair),
-                        aln_mut_pair.jaccard,
-                        str(aln_mut_pair.contingency_table),
-                        len(aln_mut_pair.seqs),
-                        ';'.join(sorted(list(aln_mut_pair.seqs))))
-
-        return out_str
-
-                                         
-    def write_jaccard_weights_network(self, min_co_occur = 2):
-        '''
-        Outputs Jaccard Index weighted mutation pairs from
-        the alignment into a tab-delimited network format.
-        Columns: source_node  target_node Jaccard_weight
-        '''
-        
-        out_str = ''
-        for mut_str_pair in self.mut_pair_to_obj:
-            aln_mut_pair = self.mut_pair_to_obj[mut_str_pair]
-            aln_mut_pair.get_jaccard_weight(min_co_occur = min_co_occur)
-
-            if aln_mut_pair.jaccard == 0.:
-                continue
-
-            out_str += '%s\t%.6f\n' % (aln_mut_pair, aln_mut_pair.jaccard)
-
-        return out_str
-
-
-    def __repr__(self):
-        '''
-        Writes table of mutation pairs and statistics.
-        '''
-        out_str = '\t'.join(['_Mut1', '_Mut2', 'numSharedSeqs', 
-                             'contTab(common_1_2_other)']) + '\n'
-        for aln_mut_pair in self.aln_mut_pairs:
-            to_print = [str(aln_mut_pair)]
-            to_print.append(str(len(aln_mut_pair.seqs)))
-            to_print.append(str(aln_mut_pair.contingency_table))
-            out_str +=  '\t'.join(to_print) + '\n'
-
-        return out_str
-
+                elif 'fisher' in self.method.lower():
+                    weight = mut_pair.pval_more
+                
+                f.write('%s\t%.6f\t%s\t%d\t%s\n' % \
+                        (mut_pair, weight, 
+                         mut_pair.contingency_table,
+                         len(mut_pair.seqs),
+                         ';'.join(sorted(list(mut_pair.seqs)))))
+     
 
     def print_stats(self, aln_pos = [], pos_subset = []):
+
+        stderr_write(['\nALIGNMENT NETWORK PROPERTIES:'])
+
         length = max(len(aln_pos), self.aln.length)
-        stderr_write([self.aln.depth, length, '(alignment depth and length).'])
-        stderr_write([len(self.aln.aln_pos), "total positions considered for network."])
-        stderr_write([len(self.mut_pair_to_obj), "functional mutation pairs in network."])
+
+        stderr_write(['Alignment depth (num. rows)',
+                      str(self.aln.depth) + \
+                      '\nAlignment length (num. columns):', 
+                      length])
+
+        stderr_write([len(self.aln.aln_pos), 
+                      "positions considered for network."])
+
+        stderr_write([len(self.mut_pair_to_obj), 
+                    "nonzero weight mutation pairs in network.\n"])
 

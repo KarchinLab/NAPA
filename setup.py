@@ -2,7 +2,7 @@ from setuptools import setup;
 from setuptools import find_packages;
 
 setup(name='napa',
-      version='0.85',
+      version='0.86',
       description='Network Analysis of Protein Adaptation (intra-protein residue coevolution network construction and analysis)',
       url='http://karchinlab.org/napa',
       author='Violeta Beleva-Guthrie',
@@ -10,6 +10,8 @@ setup(name='napa',
       license='',
       packages=find_packages(exclude=['tests']),
       install_requires=[
+          'dill',
+          'joblib',
           'numpy',
           'scipy',
           'networkx',
