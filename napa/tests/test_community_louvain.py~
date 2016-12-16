@@ -1,0 +1,15 @@
+import networkx as nx
+import napa.net.community_louvain as ml
+from itertools import islice
+
+g = nx.barbell_graph(5,5)
+print g.nodes()
+print 
+dendo_dict = {r:ml.generate_dendrogram(graph = g, 
+                                       weight = 'weight', resolution = r) \
+              for r in [0.1, 0.5, 1., 2.]}
+for r in dendo_dict:
+    print r, dendo_dict[r]
+    print ml.partition_at_level(dendo_dict[r], level = dendo_dict[r]-1)
+    print
+

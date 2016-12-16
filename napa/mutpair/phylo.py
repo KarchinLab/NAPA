@@ -28,11 +28,18 @@ import dill
 
 num_cores = multiprocessing.cpu_count()
 
+# Mutation pairs are not allowed to share
+# same numerical position
+list_mut_pairs = lambda mut_list: \
+                 [pair for pair in list_pairs(mut_list) \
+                  if get_int_substring(str(pair[0])) != \
+                  get_int_substring(str(pair[1]))]
+
 #==============================================================#
 class TreeMut(object):
     '''
     Similar to AlnMut class, but counts phylo edges instead of 
-    alignmen sequences of occurrence.
+    alignment sequences of occurrence.
     '''
     def __init__(self, phylo_edge_pairs = set(), mut_str = None):
         self.mut_str = mut_str
@@ -398,6 +405,8 @@ class TreeMutPairSet(object):
                     add_phylo_edge_pair(phylo_edge_pair)
 
         for mp in zip(mut_list_pair[0], mut_list_pair[1]):
+            if get_int_substring(mp[0]) == get_int_substring(mp[1]):
+                continue
             if mp not in self.mut_pair_to_obj:
                 mut_pair = \
                 TreeMutPair(\
@@ -410,7 +419,6 @@ class TreeMutPairSet(object):
             else:
                 mut_pair = self.mut_pair_to_obj[mp]
                 mut_pair.add_phylo_edge_pair(phylo_edge_pair)
-
 
     def get_mut_pairs(self, dist_thresh, mut_pair_type):
         ''' 
@@ -447,7 +455,7 @@ class TreeMutPairSet(object):
                 self.add_phylo_edge_pair(\
                     phylo_edge_pair = (start_edge, start_edge), 
                     mut_list_pair = \
-                    zip(*list_pairs(start_edge_sorted_muts)))
+                    zip(*list_mut_pairs(start_edge_sorted_muts)))
             
             if 'undir' in mut_pair_type.lower():
                 self.add_undir_pairs(start_edge, 
@@ -481,18 +489,18 @@ class TreeMutPairSet(object):
                 # mutations are ordered by 
                 # residue position
                 mut_pairs = [(sm, fm) \
-                             for sm in start_edge_sorted_muts \
-                             for fm in follow_edge_sorted_muts \
-                             if get_int(sm) <= get_int(fm)]
+                    for sm in start_edge_sorted_muts \
+                    for fm in follow_edge_sorted_muts \
+                    if get_int_substring(sm) < get_int_substring(fm)]
 
-                self.add_phylo_edge_pair(\
-                    phylo_edge_pair = (start_edge, follow_edge), 
-                    mut_list_pair = [start_edge_sorted_muts,
-                                     follow_edge_sorted_muts])
+                if len(mut_pairs):
+                    self.add_phylo_edge_pair(\
+                        phylo_edge_pair = (start_edge, follow_edge), 
+                        mut_list_pair = zip(*mut_pairs))
 
 
-            # Reverse order of mutations in cases where follower 
-            # position is less than start position and distance 
+            # Reverse order of mutations in cases where follower
+            # mutation position is less than start position and distance 
             # from follower to start is less than threshold
             if self.check_edge_pair(follow_edge, start_edge, 
                                     dist_thresh):
@@ -500,12 +508,12 @@ class TreeMutPairSet(object):
                 rev_mut_pairs = [(fm, sm) \
                     for sm in start_edge_sorted_muts \
                     for fm in follow_edge_sorted_muts \
-                    if get_int(sm) > get_int(fm)]
-
-                self.add_phylo_edge_pair(\
-                    phylo_edge_pair = (follow_edge, start_edge), 
-                    mut_list_pair = [follow_edge_sorted_muts,
-                                     start_edge_sorted_muts])
+                    if get_int_substring(sm) > get_int_substring(fm)]
+                
+                if len(rev_mut_pairs):
+                    self.add_phylo_edge_pair(\
+                        phylo_edge_pair = (follow_edge, start_edge), 
+                        mut_list_pair = zip(*rev_mut_pairs))
 
 
     def add_dir_pairs(self, start_edge, start_edge_sorted_muts, 

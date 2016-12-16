@@ -1,6 +1,7 @@
 import os
 from collections import defaultdict
 from copy import deepcopy
+from itertools import islice
 
 import math
 import random
@@ -11,6 +12,8 @@ from networkx.utils import weighted_choice
 from napa.utils.serials import *
 from napa.utils.io import *
 
+from napa.net.community import *
+import napa.net.community_louvain as ml
 
 class MutNet(object):
 
@@ -130,31 +133,42 @@ class MutNet(object):
         return d
 
     #------------------------------------------------------#
-    def get_centralities(self, path_len, cent_rank_type,
-                         cent_list, outfile):
-        if path_len == 1:
-            self.get_node_centralities(cent_list)
-            
-            write_table_str(outfile, '',
-                self.str_node_centralities(header = True))
+    def get_centralities(self, path_len_list, 
+                         cent_rank_type, 
+                         path_len_cent_list, 
+                         outfiles):
 
-        elif path_len > 1:
-            if 'abs' in cent_rank_type:
-                self.get_path_between_path_cent(\
-                        path_node_length = path_len)
-                write_table_str(outfile, '',
-                    self.str_path_betw_path_cent())
+        for pli, path_len in enumerate(path_len_list):
 
-            elif 'rel' in cent_rank_type:
-                header = 'node.or.path' + \
-                 (path_len - 1) * '\t' + \
-                 '\t'.join(cent_list) + \
-                 '\tnum.net.nodes\n'
-                
-                out_str = \
-                self.get_rel_cent(cent_list = cent_list, 
-                                  path_len = path_len)
-                write_table_str(outfile, header, out_str)
+            cent_list = path_len_cent_list[path_len]
+
+            if path_len == 1:
+                self.get_node_centralities(cent_list)
+
+                write_table_str(outfiles[pli], '',
+                    self.str_abs_node_centralities(header = True,
+                        sorted_cent_names = sorted(cent_list)))
+
+            elif path_len > 1:
+                if 'abs' in cent_rank_type:
+                    self.get_path_between_path_cent(\
+                            path_node_length = path_len)
+                    write_table_str(outfiles[pli], '',
+                        self.str_path_betw_path_cent())
+
+                elif 'rel' in cent_rank_type:
+                    header = 'node.or.path' + \
+                     (path_len - 1) * '\t' + \
+                     '\t'.join(cent_list) + \
+                     '\tnum.net.nodes\n'
+
+                    out_str = \
+                    self.get_rel_cent(\
+                        cent_list = cent_list, 
+                        path_len = path_len)
+                    
+                    write_table_str(outfiles[pli], 
+                                    header, out_str)
 
     #------------------------------------------------------#
     def get_node_centralities(self, cent_list):
@@ -256,6 +270,49 @@ class MutNet(object):
                     self.g.node[node]['glob.kpath'] = 0.
 
   
+
+    #------------------------------------------------------#
+    def str_abs_node_centralities(self, nodes = None,
+                                  header = True, 
+                                  sorted_cent_names = None):
+        '''
+        Write centralities for (individual) nodes 
+        in the network.
+        '''
+        
+        if sorted_cent_names == None:
+
+            sorted_cent_names = \
+            flatten([self.g.node[node].keys() for node in \
+                     self.g.nodes_iter()])
+            sorted_cent_names = \
+            sorted(list(set(sorted_cent_names)))
+        
+        out_list = []
+        if header:
+            header = 'node.or.path\t' + \
+                     '\t'.join(sorted_cent_names)    
+            out_list += [header]
+
+        if nodes != None:
+            for node in set(nodes) & set(self.g.nodes()):
+                out_list += [str(node) + '\t' + \
+                             '\t'.join(['{:.4f}'.format(\
+                                    self.g.node[node][cent]) \
+                            for cent in sorted_cent_names])]
+
+        else:
+            for node in self.g.nodes():
+                out_list += \
+                [str(node) + '\t' + \
+                 '\t'.join(['{:.4f}'.format(\
+                    self.g.node[node][cent]) \
+                    for cent in sorted_cent_names])]
+
+        if not len(out_list): return ''
+
+        return '\n'.join(out_list) + '\n'
+
     #------------------------------------------------------#
     def str_node_centralities(self, header = False, 
                               prefix = '', suffix = '',
@@ -285,16 +342,16 @@ class MutNet(object):
         if nodes != None:
             for node in set(nodes) & set(self.g.nodes()):
                 out_list +=  \
-                ['%s\t%s%s\t'%(prefix, str(node), suffix) + \
-                 '\t'.join([\
-                    '{:.4f}'.format(self.g.node[node][cent]) \
-                    for cent in sorted_cent_names]) + \
-                 '\t' + str(self.g.number_of_nodes())]
+                ['%s\t%s\t%s\t' % (prefix, str(node), suffix) + \
+                 '\t'.join(['{:.4f}'.format(\
+                    self.g.node[node][cent]) \
+                    for cent in sorted_cent_names]) + '\t' + \
+                 str(self.g.number_of_nodes())]
 
         else:
             for node in self.g.nodes():
                 out_list += \
-                [prefix + str(node) + suffix + '\t'+ \
+                ['%s\t%s\t%s\t' % (prefix, str(node), suffix) + \
                  '\t'.join(['{:.4f}'.format(\
                     self.g.node[node][cent]) \
                     for cent in sorted_cent_names]) + '\t' + \
@@ -376,8 +433,9 @@ class MutNet(object):
                                 path_len = path_node_length)
 
         if 'glob.kpath' in cent_list:            
-            self.path_kpath_centrality(alpha = 0., 
-                        path_len = path_node_length)
+            self.path_cent['betw_kpath'] = \
+                deepcopy(self.path_kpath_centrality(alpha = 0., 
+                        path_len = path_node_length))
 
     #------------------------------------------------------#
     def str_path_betw_path_cent(self):
@@ -392,29 +450,12 @@ class MutNet(object):
 
         for path in path_set:
             out_str += path + '\t' + \
-                '\t'.join([str(self.path_cent[cent][path]) \
+                '\t'.join(['%.9f'%(self.path_cent[cent][path]) \
                            if path in self.path_cent[cent] \
-                           else str(0.) for cent in \
+                           else '%.9f'%(0.) for cent in \
                            sorted_cent_names]) + '\n'
         return out_str
 
-    #------------------------------------------------------# 
-    def get_gn_communities(self): 
-        self.components =  girvan_newman(self.g, 
-                                         weight='weight')
-        
-    #------------------------------------------------------#
-    def write_communities(self, output_file):
-        '''
-        Not tested: check that mutations are output rather than
-        node numbers from networkX.
-        '''
-        with open(output_file, 'wb') as f:
-            f.write('Node\tcommunity_label\n')
-
-            for comp_i, component in enumerate(self.components):
-                for node_name in component:
-                    f.write('%s\t%d\n'%(node_name, comp_i + 1)) 
                                             
     #------------------------------------------------------#
     def all_sps(self, source, target):
@@ -437,7 +478,7 @@ class MutNet(object):
         in the network (can be further optimized)
         '''
         num_all_paths = 0
-        self.path_cent['shortest_path'] = defaultdict(float)
+        self.path_cent['betw_shortest_path'] = defaultdict(float)
 
         for source in self.g.nodes():
 
@@ -457,27 +498,27 @@ class MutNet(object):
                         [str(node) for node in sub_path]
 
                         if path_len == 1:
-                            self.path_cent['shortest_path'][\
+                            self.path_cent['betw_shortest_path'][\
                                 '_'.join(sub_path_str_list)] \
                                 += 2
                             continue
 
                         if not self.directed:
-                            self.path_cent['shortest_path'][\
+                            self.path_cent['betw_shortest_path'][\
                             '_'.join(\
                                 reversed(sub_path_str_list))] \
                                 += 1
 
-                            self.path_cent['shortest_path'][\
+                            self.path_cent['betw_shortest_path'][\
                             '_'.join(sub_path_str_list)] += 1
 
                         else:
-                            self.path_cent['shortest_path'][\
+                            self.path_cent['betw_shortest_path'][\
                                 '_'.join(sub_path_str_list)] \
                                 += 2
 
-        for path in self.path_cent['shortest_path']:
-            self.path_cent['shortest_path'][path] *= \
+        for path in self.path_cent['betw_shortest_path']:
+            self.path_cent['betw_shortest_path'][path] *= \
                                     (0.5 / num_all_paths)
 
 
@@ -569,4 +610,96 @@ class MutNet(object):
         for path in kpath_path_cent:
             kpath_path_cent[path] *= (0.5 / T)
 
+        
         return kpath_path_cent
+
+    #------------------------------------------------------#
+    #----------------------COMMUNITIES---------------------# 
+    def get_node_clusters(self, node_clust_file):
+        comm_names = []
+        comm_type = 'MLv'
+
+        if comm_type == 'GN':
+            # Get Girwan-Newman edge betw. communities
+            self.get_gn_communities(5)
+            comm_names +=  sorted(self.gn_comm_levels.keys())
+            for level_str in self.gn_comm_levels:
+                nx.set_node_attributes(self.g, level_str, 
+                    many_to_one(self.gn_comm_levels[level_str]))
+        
+        elif comm_type == 'ALP': 
+            #Get asynchronous label propagation communities
+            comm_names.append('community.alp')
+            self.get_alp_communities()
+            nx.set_node_attributes(self.g, 'community.alp', 
+                                   many_to_one(self.alp_comm))
+
+        elif comm_type == 'MLv':
+            # Louvain multilevel communities
+            self.get_multilevel_communities()
+            comm_names = sorted(self.ml_communities.keys())
+            
+            for comm_name in comm_names:
+                nx.set_node_attributes(G = self.g, 
+                    name = comm_name, 
+                    values = self.ml_communities[comm_name])
+
+        # Write desired community partitions to file
+        self.write_communities(comm_names,
+                               node_clust_file)
+
+    #------------------------------------------------------# 
+    def get_gn_communities(self, levels = 2): 
+        
+        if not hasattr(self, 'gn_components'):
+            comp = girvan_newman(self.g)
+            
+            self.gn_comm_levels = {}
+            i = 0
+            for communities in islice(comp, levels):
+                self.gn_comm_levels['community.gn.%d'%i] = \
+                    {j:sorted(list(c)) for j,c in \
+                         enumerate(communities)}
+                i += 1
+            
+
+    #------------------------------------------------------# 
+    def get_multilevel_communities(self): 
+        '''
+        Get Louvain multilevel communities.
+        '''
+        self.ml_communities = {}
+        for r in [0.5, 1., 2., 5., 10., 100.]:
+            best_part = ml.best_partition(graph = self.g, 
+                                          weight = 'weight', 
+                                          resolution = r)
+            mod = ml.modularity(best_part, self.g)
+            comm_name = 'comm.res_%.1f.mod_%.3f'%(r, mod)
+            self.ml_communities[comm_name] = best_part
+
+    #------------------------------------------------------# 
+    def get_alp_communities(self): 
+        
+        comp = asyn_lpa_communities(self.g, weight='weight')
+
+        self.alp_comm = {j:sorted(list(c)) for j,c in \
+                         enumerate(comp)}
+        
+    #------------------------------------------------------#
+    def write_communities(self, comm_names, node_clust_file):
+        '''
+        Writes node attributes calculated with each method
+        '''
+        stderr_write(['Writing community partitions:\n',
+                      ', '.join(comm_names)])
+
+        with open(node_clust_file, 'wb') as f:
+            f.write('Node\t'+ '\t'.join(comm_names) + '\n')
+            
+            for node in self.g.nodes():
+                f.write('\t'.join([str(node)] + \
+                        [str(self.g.node[node][cn]) \
+                         for cn in comm_names \
+                         if cn in self.g.node[node]]) \
+                        + '\n')
+

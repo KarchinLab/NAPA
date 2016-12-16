@@ -17,7 +17,7 @@ class Config():
         
         self.__dict__.update(config)
         self.set_run_type(command_type)
-
+        print vars(self)
         self.check_input()
 
     #---------------------------------------------------------#
@@ -60,10 +60,18 @@ class Config():
     def set_net_file_base(self):
         if not hasattr(self, 'net_file_base') and \
            not hasattr(self, 'net_file'):
+
             stderr_write(['No network name/base given.'])
             self.net_file_base = \
                 str(datetime.datetime.now()).replace(' ',
                                         '_').replace(':','-')
+
+            if hasattr(self, 'aln_fasta_file'):
+                netname = os.path.basename(self.aln_fasta_file)
+                netname = os.path.splitext(netname)[0]
+
+            self.net_file_base += '_' + netname
+
             stderr_write(['Set network base name to:',
                           self.net_file_base])
 
@@ -87,7 +95,19 @@ class Config():
                 thresh_str += 'na'
             suffix += thresh_str 
 
+            if self.net_type == 'aln':
+                occur_str = '-mo_'
+                if hasattr(self, 'min_co_occur'):
+                    occur_str += str(self.min_co_occur)
+                suffix += occur_str 
+
             if self.net_type == 'phylo':
+
+                edge_type_str = '-et_'
+                if hasattr(self, 'edge_type'):
+                    edge_type_str += self.edge_type
+                suffix += edge_type_str
+
                 dist_thresh_str = '-d_'
                 if hasattr(self, 'dist_thresh'):
                     dist_thresh_str += \
@@ -148,17 +168,20 @@ class Config():
         
         # REQUIRED: FASTA format alignment for alignment 
         # and phylo networks
-        self.aln_fasta_file = os.path.join(self.working_dir,
-                                self.data_dir,
-                                self.aln_fasta_file)
+        self.aln_fasta_file = \
+            os.path.join(self.working_dir, self.data_dir,
+                         self.aln_fasta_file)
         if not os.path.isfile(self.aln_fasta_file):
             raise ValueError('Please provide a ' + \
-                             'valid FASTA file (path).')
+                             'valid FASTA file (path)!\n' + \
+                             self.aln_fasta_file + \
+                             'does not exist!')
 
 
         # OPTIONAL: List of positions/column numbers in alignment
         # Full path to position list file if provided
-        if self.pos_list_file != None:
+        if hasattr(self, 'pos_list_file') and \
+           self.pos_list_file is not None:
             self.pos_list_file = \
                 os.path.join(self.working_dir, self.data_dir,
                              self.pos_list_file)
@@ -169,12 +192,21 @@ class Config():
         # positions considered for network (column format)
         # (remove residues from signaling peptide, and/or
         # other regions not studied).
-        if self.pos_subset_file != None:
+        if  hasattr(self, 'pos_subset_file') \
+            and self.pos_subset_file is not None:
             self.pos_subset_file = \
                 os.path.join(self.working_dir, self.data_dir,
                              self.pos_subset_file)
         else:
             self.pos_subset_file = ''
+
+        # OPTIONAL: Ranges of protein residues to include
+        # Can be used instead of pos_subset_file
+        if not hasattr(self, 'protein_ranges') or not \
+           to_bool(self.protein_ranges):
+            self.protein_ranges = []
+        
+
 
         # OPTIONAL: When using protein functional selection
         # for alignment or phylo leaf sequences, we need 

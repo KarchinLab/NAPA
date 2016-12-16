@@ -23,9 +23,9 @@ class AlnNetInput(object):
     def __init__(self, config):
         self.__dict__.update(vars(config))
 
-        #print
-        #print '\n'.join(sorted(['%s\t%s'%(k,v) for (k,v) \
-        #                        in vars(self).iteritems()]))
+        print
+        print '\n'.join(sorted(['%s\t%s'%(k,v) for (k,v) \
+                                in vars(self).iteritems()]))
 
         # REQUIRED: Reads wild-type sequence or
         # provides the ID of this sequence in the alignment
@@ -55,19 +55,79 @@ class AlnNetInput(object):
             self.pos_subset = []
         else:
             self.pos_subset = \
-            [int(p) for p in \
+            [get_int_substring(p) for p in \
              parse_column(self.pos_subset_file)]
+
+
+        # OPTIONAL: Ranges of protein residues to include
+        # Can be used instead of pos_subset_file
+        if len(self.protein_ranges):
+            if len(self.pos_subset):
+                stderr_write(['WARNING:Position subset already',
+                              'defined in file',
+                              self.pos_subset_file,
+                              'Protein range list ignored.'])
+            else:
+                self.pos_subset = set()
+                stderr_write([str(self.protein_ranges)])
+                for range_str in self.protein_ranges:
+                    recs = range_str.strip().split('-')
+                    if len(recs) != 2:
+                        raise ValueError('Invalid protein' + \
+                                'range specified in config:' + \
+                                str(recs))
+                    begin = get_int_substring(recs[0])
+                    end = get_int_substring(recs[1])
+                    self.pos_subset |= set(range(begin, 
+                                             end + 1))
+                self.pos_subset = sorted(list(self.pos_subset))
+                
+        # OPTIONAL: Threshold for including links in network
+        # For p-values from Fisher's Exact Test, this is the 
+        # maximum p-value; 
+        # For Jaccard indices, this is the minimum Jaccard 
+        # index weight
+        if not hasattr(self, 'thresh'):
+            self.thresh = 0.05
+            stderr_write(['WARNING: No threshold provided',
+                          'for network method', self.method,
+                          '\nDefault set to:', self.thresh])
+        elif not to_bool(self.thresh) and not \
+             self.thresh > 0: 
+            self.thresh = 0.05
+            stderr_write(['WARNING: No threshold provided',
+                          'for network method', self.method,
+                          '\nDefault set to:', self.thresh])
+
+        if not hasattr(self, 'min_co_occur'):
+            self.min_co_occur = 1
+            stderr_write(['WARNING: No minimum co-occurrence',
+                          'count provided for network method', 
+                          self.method,
+                          '\nDefault set to:', self.min_co_occur])
+
+        elif not to_bool(self.min_co_occur):
+            self.min_co_occur = 1
+            stderr_write(['WARNING: No minimum co-occurrence',
+                          'count provided for network method', 
+                          self.method,
+                          '\nDefault set to:', self.min_co_occur])
 
         # OPTIONAL: Selection by functional annotation
         # Prot. func. for each seq. in aln with known func. annot.
-        if len(self.prot_func_file) == 0:
+        if not hasattr(self, 'prot_func_file'):
+            self.seqid_to_prot_func = {'function':'default'}
+        elif not to_bool(self.prot_func_file):
             self.seqid_to_prot_func = {'function':'default'}
         else:
             self.seqid_to_prot_func = \
                 parse_keyval_dict(self.prot_func_file)
 
-        # Subset of protein selected functions considered 
-        if len(self.sel_prot_func_file) == 0:
+        # OPTIONAL: Subset of protein selected functions 
+        # considered 
+        if not hasattr(self, 'sel_prot_func_file'):
+            self.sel_prot_func = ['default']
+        elif not to_bool(self.sel_prot_func_file):
             self.sel_prot_func = ['default']
         else:
             self.sel_prot_func = \
@@ -78,6 +138,8 @@ class AlnNetInput(object):
         
         # Get wt sequence id and string
         self.get_wt_seq()
+
+
 
 
     def print_input_summary(self):
@@ -99,6 +161,7 @@ class AlnNetInput(object):
                       annot_key = 'function',
                       seqid_to_annot = self.seqid_to_prot_func, 
                       sel_annot_list = self.sel_prot_func)
+
 
     def get_wt_seq(self):
         '''
@@ -153,7 +216,9 @@ class AlnNetInput(object):
                               'already in alignment, '
                               '\n OR a new ID with sequence', 
                               'that aligns to the alignment',
-                              '(or aln. column subset chosen).']))
+                              '(or aln. column subset chosen).\n',
+                              self.wt_id, 'not in\n', 
+                              str(sorted(self.aln.seqid_to_seq))]))
 
 
 
@@ -168,6 +233,8 @@ def run_aln_mut_pairs(config):
 
     # Calculates edge weights for co-occuring mutation pairs
     aln_mut_pair_set = AlnMutPairSet(inp)
+
+
 
     # Output network in tab-delimited format
     # Source\tTarget\tWeight

@@ -10,15 +10,17 @@ Python serial objects manipulation.
 #=========================================================#
 # List/tuple manipulation
 #=========================================================#
-flatten = lambda x: [subitem for item in x \
-                     for subitem in item]
-list_pairs = lambda x: [(x[i1],x[i2]) \
-                        for i1 in range(len(x)-1) \
-                        for i2 in range(i1+1,len(x))]
-sort_list_by_other = \
-    lambda x,y: [x for (y,x) in \
-                 sorted(zip(y,x), 
-                        key=lambda pair: pair[0])]
+flatten = lambda x: \
+    [subitem for item in x for subitem in item]
+
+list_pairs = lambda x: \
+    [(x[i1],x[i2]) \
+     for i1 in range(len(x)-1) \
+     for i2 in range(i1+1,len(x))]
+
+sort_list_by_other = lambda x,y: \
+    [x for (y,x) in sorted(zip(y,x), 
+                           key=lambda pair: pair[0])]
 
 def window(seq, n=2):
     '''
@@ -37,11 +39,20 @@ def window(seq, n=2):
 #=========================================================#
 # Dictionaries
 #=========================================================#
-# Update dictionary with numerical values from  another
 def num_dict_update_add(d0, d1):
+    '''
+    Update dictionary with numerical values from  another
+    '''
     for k in d1:
         d0[k] += d1[k]
+
     return d0
+
+
+many_to_one = lambda dl: \
+              {v:k for k,l in dl.iteritems() for v in l}
+
+        
 
 #=========================================================#
 # String manipulation
@@ -77,15 +88,13 @@ lambda x: sorted(x, key = lambda s: get_int_substring(s))
 # Strings or numbers to Boolean 
 #=========================================================#
 def to_bool(v):
-    if isinstance(v, bool):
-        return v
-    
+    '''
+    Also interprets no/false strings as False
+    '''
     if isinstance(v, str):
         if v.lower() in [ '', '0', 'false', 'f', 'n', 'no']:
             return False
-        else:
-            return True
 
-    if not len(v):
-        return False
-    return True
+    return bool(v)
+
+

@@ -94,3 +94,37 @@ def parse_keyval_dlist(infile):
             if len(recs) > 1:
                 out_dict[recs[0]].append(recs[1])
     return out_dict
+
+
+#=========================================================#
+# Writing files from python serial objects
+#=========================================================#
+def write_list_column(out_list = [],
+                 outfile = 'list-column.txt', header = ''):
+    with open(outfile, 'w') as f:
+        if len(header):
+            f.write(header + '\n')
+        f.write('\n'.join([str(v) for v in out_list]) + '\n')
+            
+
+def write_keyval_dict(out_dict = {},
+                      outfile = 'dict-keyval.txt', 
+                      header = ''):
+    with open(outfile, 'w') as f:
+        if len(header):
+            f.write(header + '\n')
+        f.write('\n'.join(['%s\t%s'%(k,v) \
+                for k,v in out_dict.iteritems()]) + '\n')
+
+def write_keyval_dlist(out_dict = {},
+                       outfile = 'dict-keyvallist.txt', 
+                       header = '', val_sep = ';'):
+
+    with open(outfile, 'w') as f:
+        if len(header):
+            f.write(header + '\n')
+        f.write('\n'.join(\
+            ['%s\t%s'%(k, 
+                       val_sep.join([str(v) for v in l])) \
+                       for k, l in out_dict.iteritems()]))
+        f.write('\n')

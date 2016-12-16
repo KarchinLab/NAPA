@@ -20,6 +20,13 @@ def add_seq_id_to_set(seq_id, curr_set):
         curr_set.add(seq_id)
     return curr_set
 
+# Mutation pairs are not allowed to share
+# same numerical position
+list_mut_pairs = lambda mut_list: \
+                 [pair for pair in list_pairs(mut_list) \
+                  if get_int_substring(str(pair[0])) != \
+                  get_int_substring(str(pair[1]))]
+
 class AlnMut(object):
 
     def __init__(self, seqs=set(), mut_str = None):
@@ -41,8 +48,9 @@ class AlnMutPair(object):
 
         # Unique set of seqs containing mutation
         if not len(seqs):
-            raise ValueError("No sequences or empty sequence IDs"+ \
-                             "associated with mut pair.")
+            raise ValueError(\
+                "No sequences or empty sequence IDs "+ \
+                    "associated with mut pair.")
         else:
             if not isinstance(seqs, basestring):
                 self.seqs = set(seqs)
@@ -50,7 +58,8 @@ class AlnMutPair(object):
                 self.seqs = set([seqs])
 
         if not mut_pair:
-            raise ValueError("No mutations given for mutation pair")
+            raise ValueError('No mutations given ' + \
+                             'for mutation pair')
         else:
             # Mutations in mut_pair should be AlnMut instances
             self.mut_pair = mut_pair 
@@ -92,38 +101,57 @@ class AlnMutPair(object):
         2. if no minimum is set, introduce correction for pairs 
         of muts occurring only once, and only together in one seq.
         '''
-        [[occur01, occur0], [occur1, occur_other]] = \
-                    self.contingency_table
-        
-        if min_co_occur == 0:
-            self.jaccard = (float(occur01) - 1./self.num_seqs) / \
-                           (float(occur01 + occur0 + occur1))
-        elif occur01 < min_co_occur:
-            self.jaccard = 0.
-        else:
-            self.jaccard = (float(occur01) - 1./self.num_seqs) / \
-                            (float(occur01 + occur0 + occur1))
+        [[num11, num10], [num01, num00]] = self.contingency_table
 
-    def get_mod_jaccard_weight(self):
+        if num11 < min_co_occur:
+            self.jaccard = 0.
+            return
+
+        # Penalizes for small co-ocurrence num11
+        epsilon = 1./self.num_seqs
+
+        self.jaccard = max(0.,
+            (num11 - epsilon) / float(num11 + num01 + num10))
+
+
+    def get_mod_jaccard_weight(self, min_co_occur = 2):
         '''
         Modified Jaccard score based on sequence occurrence counts
         corrected for low mutation co-occurrence counts
         '''
         [[num11, num10], [num01, num00]] = self.contingency_table
+        if num11 < min_co_occur:
+            self.jaccard = 0.
+            return
+
         # Penalizes for small co-ocurrence num11
-        epsilon = float(num00)/(num11 + num10 + num01)
+        epsilon = float(num00)/(num11 + num10 + num01 + num00)
         self.jaccard = max(0.,
             (num11 - epsilon) / float(num11 + num01 + num10))
 
-    def get_fisher_pval_weight(self):
+
+    def get_fisher_pval_weight(self, min_co_occur = 2):
         ''' 
         Unlike Jaccard, the smaller the p-value, 
         the greater the association '''
-        self.odds_ratio_less, self.pval_less = \
+        if self.contingency_table[0][0] < min_co_occur:
+
+            [[num11, num10], [num01, num00]] = \
+                                self.contingency_table
+
+            self.odds_ratio_more = float(num11 * num00)
+            self.odds_ratio_more /= num10 * num01
+            self.odds_ratio_less = float(num10 * num01)
+            self.odds_ratio_less /= num11 * num00
+            self.pval_less = 1.
+            self.pval_more = 1.
+            return
+
+        self.odds_ratio, self.pval_less = \
         stats.fisher_exact(self.contingency_table, 
                            alternative = 'less')
 
-        self.odds_ratio_more, self.pval_more = \
+        self.odds_ratio, self.pval_more = \
         stats.fisher_exact(self.contingency_table, 
                            alternative = 'greater')
 
@@ -145,9 +173,13 @@ class AlnMutPairSet(object):
 
         self.aln.get_seq_muts(self.wt_seq)
 
+        # Print mutations from WT for each sequence in aln
+        self.print_aln_mut_list()
+
         # Get all possible mut pairs in alignment, 
         #given selected function
         self.get_aln_mut_pairs()
+
 
     def __repr__(self):
         out_str = ''
@@ -173,13 +205,15 @@ class AlnMutPairSet(object):
 
         return out_str
 
+
     def get_aln_mut_pairs(self):
         ''' 
         Extract pairs of mutations occurring 
         in at least one seq.
         '''
 
-        self.mut_str_to_obj, self.mut_pair_to_obj = {}, {}
+        self.mut_str_to_obj = {} 
+        self.mut_pair_to_obj = {}
 
         for seqid in self.aln.seqid_to_mut:
             
@@ -191,7 +225,7 @@ class AlnMutPairSet(object):
                     self.mut_str_to_obj[m].add_seq(seqid)
 
             for mp in \
-                list_pairs(self.aln.seqid_to_mut[seqid]):
+                list_mut_pairs(self.aln.seqid_to_mut[seqid]):
                 if mp not in self.mut_pair_to_obj:
                     self.mut_pair_to_obj[mp] = \
                     AlnMutPair(seqs = seqid, 
@@ -209,13 +243,38 @@ class AlnMutPairSet(object):
            
             mut_pair = self.mut_pair_to_obj[mp]
             
-            mut_pair.get_contingency_table(all_seqs = all_seqs)
+            mut_pair.get_contingency_table(all_seqs = \
+                                           all_seqs)
             
-            if 'jaccard' in self.method.lower():
-                mut_pair.get_mod_jaccard_weight()
+            if 'mod_jaccard' in self.method.lower():
+                mut_pair.get_mod_jaccard_weight(\
+                                self.min_co_occur)
+
+            elif 'jaccard' in self.method.lower():
+                mut_pair.get_jaccard_weight(\
+                                self.min_co_occur)
+            
             elif 'fisher' in self.method.lower():
-                mut_pair.get_fisher_pval_weight()
+                mut_pair.get_fisher_pval_weight(\
+                                self.min_co_occur)
             
+    def print_aln_mut_list(self):
+        outfile = ''
+        if hasattr(self, 'print_seq_muts'):
+            if to_bool(self.print_seq_muts):
+                if hasattr(self, 'aln'):
+                    outfile = \
+                    '.'.join(self.aln_fasta_file.split('.')[0:-1])
+                    outfile = outfile + '.mutation-list.txt'
+                    header = 'sequence_id\tmutations_from_'
+                    header += header + self.wt_id.replace(' ','-')
+
+        if len(outfile):            
+            stderr_write(['Printing alignment mutations from', 
+                          self.wt_id, 'to file', outfile])
+            
+            write_keyval_dlist(self.aln.seqid_to_mut,
+                               outfile, header, ';')
 
     def write_network_to_file(self, file_path):
         '''
