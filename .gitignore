@@ -2,6 +2,6 @@
 /dist/
 /napa.egg-info/
  *.pyc
-
+ *~
 napa/tests/results/*
 napa/tests/scripts/log/*
