@@ -24,7 +24,7 @@ from napa.phylo.tree import get_mrca_subtree
 
 from joblib import Parallel, delayed
 import multiprocessing
-import dill
+#import dill
 
 num_cores = multiprocessing.cpu_count()
 
@@ -89,6 +89,7 @@ class TreeMutPair(object):
             self.all_edges = set(all_edges)
         self.prot_func_transitions = prot_func_transitions
 
+        # Wildtype/ancestral sequence needed to get mutations
         if wt_seq == None:
             raise ValueError('Wild type sequence not provided ' + \
                              str(self))
@@ -170,31 +171,39 @@ class TreeMutPair(object):
                                   [self.num10, self.num00]]
 
 
-    def get_contingency_table_edge_counts(self):
+    def get_contingency_table_edge_counts(self, 
+                                          all_phylo_edge_pairs):
         ''' 
         A simpler contingency table based on counts of 
         co-occurrence of mutations in tree edges 
         rather than clades. 
         Looking at clade size tends to be more informative.
         '''
+        # both mutations
         self.num11 = len(self.phylo_edge_pairs)
+        
+        # just the 1st not 2nd
         self.num10 = len(self.mut_pair[0].phylo_edge_pairs - \
                          self.phylo_edge_pairs) 
+
+        # just the 2nd not 1st
         self.num01 = len(self.mut_pair[1].phylo_edge_pairs - \
                          self.phylo_edge_pairs)
-        self.num00 = len(self.all_phylo_edge_pairs\
+
+        # neither mutation
+        self.num00 = len(all_phylo_edge_pairs\
                           -self.mut_pair[0].phylo_edge_pairs \
                           -self.mut_pair[1].phylo_edge_pairs)
         self.contingency_table = [[self.num11, self.num01], 
                                   [self.num10, self.num00]]
 
 
-    def get_mod_jaccard(self):
+    def get_mod_jaccard(self, all_phylo_edge_pairs):
         '''
         Modified Jaccard score for clade / edge count overlap
         '''
         self.get_contingency_table()
-
+        #self.get_contingency_table_edge_counts(all_phylo_edge_pairs)
         [[num11, num10], [num01, num00]] = self.contingency_table
         # Penalizes for small co-ocurrence num11
         epsilon = float(num00)/(num11 + num10 + num01)
@@ -290,9 +299,6 @@ class TreeMutPairSet(object):
         self.get_leaf_func_muts()
 
 
-        # Set of all phylogenetic tree edges 
-        # When looking at shared edges not lineages
-        #self.all_phylo_edge_pairs = set()
 
         # The folling generates a linegraph object of the 
         # whole tree
@@ -306,6 +312,10 @@ class TreeMutPairSet(object):
          # Nodes of PhyloEdge are edges are in the original tree
         self.anc_edge.build_edge_tree()
 
+        # Set of all phylogenetic tree edges 
+        # When looking at shared edges not lineages
+        self.all_phylo_edge_pairs = []
+
         # Get set of all pairs of mutations occurring along tree
         # default directed mutation pairs
         stderr_write(['Obtaining mutation pairs along tree...'])
@@ -314,6 +324,9 @@ class TreeMutPairSet(object):
                              else 'dir'
         self.get_mut_pairs(dist_thresh, self.mut_pair_type)
 
+        # Get unique edge pairs
+        self.all_phylo_edge_pairs = set(self.all_phylo_edge_pairs)
+
         for mp in self.mut_pair_to_obj:
             mut_pair = self.mut_pair_to_obj[mp]
             if 'fisher' in method.lower():
@@ -321,22 +334,19 @@ class TreeMutPairSet(object):
                 mut_pair.get_fisher_pval()
             else:
                 mut_pair.mod_jaccard = 0.
-                mut_pair.get_mod_jaccard()
+                mut_pair.get_mod_jaccard(self.all_phylo_edge_pairs)
 
 
     def __repr__(self):
         out_str = ''
         for mp in self.mut_pair_to_weight:
-            out_str += '%s\t%.6f\n'%('\t'.join(mut_pair), 
-                            self.mut_pair_to_weight[mut_pair])
+            out_str += '%s\t%.6f\n'%('\t'.join(mp), 
+                                     self.mut_pair_to_weight[mp])
         return out_str
 
 
     def get_sel_func_nodes(self, annot_key = 'function',
                            annot_list = ['']):
-        if annot_list == [''] and len(annot_list_file):
-            annot_list = parse_column(annot_list_file)
-        
         self.sel_func_node_ids = self.aln.seqids_with_annot(\
                                     annot_key = annot_key,
                                     annot_list = annot_list)
@@ -419,6 +429,8 @@ class TreeMutPairSet(object):
             else:
                 mut_pair = self.mut_pair_to_obj[mp]
                 mut_pair.add_phylo_edge_pair(phylo_edge_pair)
+
+        self.all_phylo_edge_pairs.append(phylo_edge_pair)
 
     def get_mut_pairs(self, dist_thresh, mut_pair_type):
         ''' 
@@ -514,7 +526,7 @@ class TreeMutPairSet(object):
                     self.add_phylo_edge_pair(\
                         phylo_edge_pair = (follow_edge, start_edge), 
                         mut_list_pair = zip(*rev_mut_pairs))
-
+                    
 
     def add_dir_pairs(self, start_edge, start_edge_sorted_muts, 
                       dist_thresh):
@@ -543,6 +555,11 @@ class TreeEnsembleMutPairs(object):
     def __init__(self, inp):
         self.__dict__.update(vars(inp))
     
+        # print the a mutation list for each 
+        # sequence in original alignment to 
+        # file
+        self.print_aln_mut_list()
+
         self.num_trees = len(flatten(self.tree_files.values()))
         self.mut_pair_to_weight = defaultdict(float)
         self.mut_pair_to_trees = defaultdict(int)
@@ -573,6 +590,27 @@ class TreeEnsembleMutPairs(object):
 
         return out_str
 
+    def print_aln_mut_list(self):
+        outfile = ''
+        if hasattr(self, 'print_seq_muts'):
+            if to_bool(self.print_seq_muts):
+                if hasattr(self, 'aln'):
+                    outfile = \
+                    '.'.join(self.aln_fasta_file.split('.')[0:-1])
+                    outfile = outfile + '.mutation-list.txt'
+                    header = 'sequence_id\tmutations_from_'
+                    header += header + self.wt_id.replace(' ','-')
+                    if not hasattr(self.aln, 'seqid_to_mut'):
+                        self.aln.get_seq_muts(wt_seq = self.wt_seq)
+
+        if len(outfile):            
+            stderr_write(['Printing alignment mutations from', 
+                          self.wt_id, 'to file', outfile])
+            
+            write_keyval_dlist(self.aln.seqid_to_mut,
+                               outfile, header, ';')
+
+
     def assign_mut_pair_weights(self, mut_pair_dicts):
         for dict_pair in mut_pair_dicts:
             mut_pair_to_weight = dict_pair[0]
@@ -586,54 +624,6 @@ class TreeEnsembleMutPairs(object):
             num_dict_update_add(self.mut_pair_to_trees,
                                 mut_pair_to_trees)
        
-    def get_tree_mut_pair_set(self, prefix, i):
-        mut_pair_to_weight = defaultdict(float)
-        mut_pair_to_trees = defaultdict(int)
-        tree_file = self.tree_files[prefix][i]
-
-        int_seq_file = self.int_seq_files[prefix][i]
-
-        int_func_file = self.int_func_files[prefix][i] \
-                        if len(self.int_func_files) \
-                        else ''
-
-        int_seqid_to_prot_func = \
-             parse_keyval_dict(int_func_file)
-
-        mut_pair_set = \
-            TreeMutPairSet(\
-            aln = self.aln, aln_pos = self.pos_list, 
-            pos_subset = self.pos_subset,
-            wt_seq = self.wt_seq, 
-            leaf_fasta_file = self.aln_fasta_file,
-            int_node_fasta_file = int_seq_file,
-            leaf_seqid_to_prot_func = \
-            self.seqid_to_prot_func, 
-            int_seqid_to_prot_func = int_seqid_to_prot_func,
-            prot_func_transitions = self.func_transitions,
-            sel_prot_func_list = self.sel_prot_func,
-            dist_thresh = self.dist_thresh,
-            mut_pair_type = self.edge_type, 
-            method = self.method, 
-            tree_nwk_file = tree_file)
-        
-        for mp in mut_pair_set.mut_pair_to_obj:
-            mut_pair = mut_pair_set.mut_pair_to_obj[mp]
-
-            if 'fisher' in self.method.lower():
-                
-                if mut_pair.p_val_more <= self.thresh:
-                    self.mut_pair_to_weight[mp] += \
-                                    1./self.num_trees
-                    self.mut_pair_to_trees[mp] += 1
-                
-            else:
-                if mut_pair.mod_jaccard > 0.0:
-                    self.mut_pair_to_weight[mp] += \
-                    mut_pair.mod_jaccard / float(self.num_trees)
-                    self.mut_pair_to_trees[mp] += 1
-        
-
     def add_mut_pairs(self, mut_pair_set):
         if 'fisher' in self.method.lower():
             self.add_mut_pairs_fisher(mut_pair_set)
@@ -669,6 +659,7 @@ class TreeEnsembleMutPairs(object):
         '''
         
         for mp in mut_pair_set.mut_pair_to_obj:
+            # mut_pair_set for a single tree
             mut_pair = \
                 mut_pair_set.mut_pair_to_obj[mp]
 

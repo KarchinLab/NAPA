@@ -15,20 +15,26 @@ results_dir: results/
 edge_type: undir
 net_type: phylo
 net_file_base: TEM-ext-spec
+#---------------------------------------------------------#
 # If left blank, name will be built from 
 # other options, using net_file_base and dirs
 net_file: 
+
 
 #=========================================================#
 # Network Construction - Aln and Phylo Based Networks
 #=========================================================#
 # REQ: options for network construction
 method: mod_jaccard
-thresh: 0.01
+thresh: 0.005
+min_co_occur: 1
 output_edge_weight_table: yes
 #---------------------------------------------------------#
 wild_type: TEM_1
 aln_fasta_file: TEM-SHV-prot-aln.fasta
+# Whether or not to print the list of mutations 
+# in each sequence in the alignment to file
+print_seq_muts: yes
 #---------------------------------------------------------#
 # OPT: Custom numbering of protein/alignment positions
 pos_list_file: TEM-pos-list.txt
@@ -49,7 +55,7 @@ func_transitions_file: TEM-ext-spec-transitions.txt
 # REQ: Look for pairs within a certain distance on the 
 # tree; require a minimum number of trees supporting 
 # mutation pairs
-dist_thresh: 0.04
+dist_thresh: 0.05
 tree_support_thresh: 2
 #---------------------------------------------------------#
 # REQ: Subdirectories with tree files; tree suffices
@@ -75,19 +81,23 @@ cluster_nodes: yes
 # centralities
 calculate_centralities: no
 #---------------------------------------------------------#
-# OPT: Network unit for which centrality will be calculated
-# The path length = number of connected nodes in path
-# default is 1 (single node), when left blank
-path_len: 
+# OPT: Network units for which centrality will be calculated
+# path length = number of connected nodes in path
+# when left blank, default is 1 (single node)
+path_len:
+- 1
+- 2
+- 3
 #---------------------------------------------------------#
 # OPT: For calculating centralities
 # Calculate an 'absolute' or 'relative' (ranking) 
 # of centralities for paths with length > 1
 # default = 'absolute' when left blank or when 
 # path_len == 1
-cent_rank_type: 
+cent_rank_type: absolute
+
 #---------------------------------------------------------#
 # OPT: Which types of centralities to calculate
 # Choice: ['loc','glob','both'] 
 # Default is 'loc' (local), when left blank
-cent_type: 
+cent_type: both

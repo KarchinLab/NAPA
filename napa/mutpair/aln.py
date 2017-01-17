@@ -293,9 +293,9 @@ class AlnMutPairSet(object):
         '''
         with open(file_path, 'wb') as f:
             f.write('\t'.join(\
-                ['Mut1', 'Mut2', 'Weight' + str(self.method),
+                ['Mut1', 'Mut2', 'Weight_' + str(self.method),
                  'Contingency_Table', 'Co-occur_Count', 
-                 'weight_' + str(self.method)]) + '\n')
+                 'Sequence_Sources']) + '\n')
                     
             for mp in self.mut_pair_to_obj:
                 mut_pair = self.mut_pair_to_obj[mp]

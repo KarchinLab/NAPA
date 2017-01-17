@@ -1,5 +1,6 @@
 #=========================================================#
 # Example NAPA configuration file
+# (Alignment based network)
 #=========================================================#
 # Input and output dirs will be relative to working_dir
 # All input files will be in the input_dir
@@ -24,16 +25,27 @@ net_file:
 #=========================================================#
 # REQ: options for network construction
 method: mod_jaccard
-thresh: 0.01
+thresh: 0.005
+# By default the minimum co-occurrence count is 1(sequence)
+min_co_occur: 1
 output_edge_weight_table: yes
 #---------------------------------------------------------#
 wild_type: TEM_1
+# REQ: Original protein multiple seq. alignment
 aln_fasta_file: TEM-SHV-prot-aln.fasta
+# Whether or not to print the list of mutations 
+# in each sequence in the alignment to file
+print_seq_muts: yes
 #---------------------------------------------------------#
 # OPT: Custom numbering of protein/alignment positions
 pos_list_file: TEM-pos-list.txt
 # OPT: Selecting a subset of posion/ranges in protein
 pos_subset_file: TEM-pos-subset.txt
+# OPT: Rather then enumerating positions, specify
+# ranges of positions (uncomment to do that)
+#protein_ranges:
+#- 23-296
+#---------------------------------------------------------#
 # OPT: Selecting a subset of sequences by func. annot
 prot_func_file: TEM-functions.txt
 sel_prot_func_file: TEM-functions-selected.txt
@@ -49,10 +61,16 @@ cluster_nodes: no
 # centralities
 calculate_centralities: yes
 #---------------------------------------------------------#
-# OPT: Network unit for which centrality will be calculated
-# The path length = number of connected nodes in path
-# default is 1 (single node), when left blank
-path_len: 1
+# OPT: List of network path lengths for which centrality 
+# will be calculated.
+# The path length is the number of connected nodes in path.
+# Default is [1] (single node), when left blank and 
+# calculate_centralities == True. (Reset to [2] if 
+# cent_rank_type == 'relative')
+path_len:
+- 1
+- 2
+- 3
 #---------------------------------------------------------#
 # OPT: For calculating centralities
 # Calculate an 'absolute' or 'relative' (ranking) 

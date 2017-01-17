@@ -36,7 +36,9 @@ are not already installed.
 
 * numpy
 * scipy
+* joblib
 * networkx
 * ete2
+* pyyaml
 
 Note the pip scipy installation can sometimes have issues.  If so, alternate methods of installing scipy may be preferable.  See scipy `install <http://www.scipy.org/install.html>`_ for details.  Then rerun pip install napa.

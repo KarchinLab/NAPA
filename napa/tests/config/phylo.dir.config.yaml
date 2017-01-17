@@ -1,5 +1,6 @@
 #=========================================================#
 # Example NAPA configuration file
+# Directed phylogeny based network
 #=========================================================#
 # Input and output dirs will be relative to working_dir
 # All input files will be in the input_dir
@@ -24,10 +25,11 @@ net_file:
 #=========================================================#
 # REQ: options for network construction
 method: mod_jaccard
-thresh: 0.01
+thresh: 0.005
 output_edge_weight_table: yes
 #---------------------------------------------------------#
 wild_type: TEM_1
+#Multiple sequence alignment for leaf sequences
 aln_fasta_file: TEM-SHV-prot-aln.fasta
 #---------------------------------------------------------#
 # OPT: Custom numbering of protein/alignment positions
@@ -48,8 +50,8 @@ func_transitions_file: TEM-ext-spec-transitions.txt
 #=========================================================#
 # REQ: Look for pairs within a certain distance on the 
 # tree; require a minimum number of trees supporting 
-# mutation pairs
-dist_thresh: 0.04
+# mutation pairs, i.e. with non-zero weight
+dist_thresh: 0.01
 tree_support_thresh: 2
 #---------------------------------------------------------#
 # REQ: Subdirectories with tree files; tree suffices
@@ -71,14 +73,16 @@ tree_internal_node_state_suffix: .internalStates.txt
 # REQ: Whether to perform clustering nodes into communities
 cluster_nodes: no
 #---------------------------------------------------------#
-# REQ: Whether to calculate node/path/relative path
-# centralities
+# REQ: Whether to calculate path centralities
 calculate_centralities: yes
 #---------------------------------------------------------#
 # OPT: Network unit for which centrality will be calculated
 # The path length = number of connected nodes in path
 # default is 1 (single node), when left blank
-path_len: 3
+path_len: 
+- 1
+- 2
+- 3
 #---------------------------------------------------------#
 # OPT: For calculating centralities
 # Calculate an 'absolute' or 'relative' (ranking) 
