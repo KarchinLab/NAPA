@@ -93,52 +93,68 @@ class AlnMutPair(object):
         self.num_seqs = len(all_seqs)
         
 
-    def get_jaccard_weight(self, min_co_occur = 2):
+    def get_raw_count(self, min_co_occur = 2):
+        '''
+        Weight pairs by co-occurrence count only
+        '''
+        [[num11, num10], 
+         [num01, num00]] = self.contingency_table
+        
+        self.weight = num11
+                      
+
+
+    def get_jaccard(self, min_co_occur = 2):
         ''' 
         OBSOLETE 
         Jaccard weight with 
         1. minimum requirement for coocurrence count
-        2. if no minimum is set, introduce correction for pairs 
-        of muts occurring only once, and only together in one seq.
+        2. if no minimum is set, introduce correction 
+        for pairs of muts occurring only once
+        and only together in one seq.
         '''
-        [[num11, num10], [num01, num00]] = self.contingency_table
+        [[num11, num10], 
+         [num01, num00]] = self.contingency_table
 
         if num11 < min_co_occur:
-            self.jaccard = 0.
+            self.weight = 0.
             return
 
         # Penalizes for small co-ocurrence num11
         epsilon = 1./self.num_seqs
 
-        self.jaccard = max(0.,
+        self.weight = max(0.,
             (num11 - epsilon) / float(num11 + num01 + num10))
 
 
-    def get_mod_jaccard_weight(self, min_co_occur = 2):
+    def get_mod_jaccard(self, min_co_occur = 2):
         '''
         Modified Jaccard score based on sequence occurrence counts
         corrected for low mutation co-occurrence counts
         '''
         [[num11, num10], [num01, num00]] = self.contingency_table
-        if num11 < min_co_occur:
-            self.jaccard = 0.
+        
+        if (num11 < min_co_occur):
+            self.weight = 0.
             return
 
         # Penalizes for small co-ocurrence num11
-        epsilon = float(num00)/(num11 + num10 + num01 + num00)
-        self.jaccard = max(0.,
-            (num11 - epsilon) / float(num11 + num01 + num10))
+        epsilon = 0. # no penalty
+        #epsilon = float(num00)/(num11 + num10 + num01)
+        
+        self.weight = max(0.,(num11 - epsilon)) /   \
+                      float(num11 + num01 + num10)
 
 
     def get_fisher_pval_weight(self, min_co_occur = 2):
         ''' 
         Unlike Jaccard, the smaller the p-value, 
         the greater the association '''
-        if self.contingency_table[0][0] < min_co_occur:
 
-            [[num11, num10], [num01, num00]] = \
-                                self.contingency_table
-
+        [[num11, num10], 
+         [num01, num00]] = self.contingency_table
+        
+        if num11 < min_co_occur:
             self.odds_ratio_more = float(num11 * num00)
             self.odds_ratio_more /= num10 * num01
             self.odds_ratio_less = float(num10 * num01)
@@ -155,7 +171,7 @@ class AlnMutPair(object):
         stats.fisher_exact(self.contingency_table, 
                            alternative = 'greater')
 
-
+        self.weight = self.pval_more
 
 class AlnMutPairSet(object):
     '''
@@ -187,16 +203,17 @@ class AlnMutPairSet(object):
             
             mut_pair = self.mut_pair_to_obj[mp]
     
-            if 'jaccard' in self.method.lower(): 
-                if mut_pair.jaccard < self.thresh:
+            if (('jaccard' in self.method.lower()) or 
+                ('raw_count' in self.method.lower())): 
+                if mut_pair.weight < self.thresh:
                     continue
 
                 out_str += \
                 '%s\t%.6f\n' % (mut_pair, 
-                                mut_pair.jaccard)
+                                mut_pair.weight)
 
             elif 'fisher' in self.method.lower(): 
-                if mut_pair.pval_more > self.thresh:
+                if mut_pair.weight > self.thresh:
                     continue
 
                 out_str += \
@@ -214,9 +231,12 @@ class AlnMutPairSet(object):
 
         self.mut_str_to_obj = {} 
         self.mut_pair_to_obj = {}
+        stderr_write(['Extracting pairs of',
+                      'mutations from', 
+                      len(self.aln.seqid_to_mut), 
+                      'sequences.'])
 
         for seqid in self.aln.seqid_to_mut:
-            
             for m in self.aln.seqid_to_mut[seqid]:
                 if m not in self.mut_str_to_obj:
                     self.mut_str_to_obj[m] = \
@@ -239,20 +259,28 @@ class AlnMutPairSet(object):
         # for pairs of co-occurring mutations
         all_seqs = set(self.aln.seqid_to_mut.keys())
 
-        for mp in self.mut_pair_to_obj:
-           
+        if not len(self.mut_pair_to_obj):
+            stderr_write(['WARNING:', 'No mutation pairs found!',
+                          '\n\tEmpty network will be produced'])
+        else:
+            stderr_write(['Calculating weights for', 
+                          len(self.mut_pair_to_obj),
+                          'mutation pairs.'])
+
+        for mp in self.mut_pair_to_obj:           
             mut_pair = self.mut_pair_to_obj[mp]
             
             mut_pair.get_contingency_table(all_seqs = \
                                            all_seqs)
             
+            if 'raw_count' in self.method.lower():
+                mut_pair.get_raw_count(self.min_co_occur)
+
             if 'mod_jaccard' in self.method.lower():
-                mut_pair.get_mod_jaccard_weight(\
-                                self.min_co_occur)
+                mut_pair.get_mod_jaccard(self.min_co_occur)
 
             elif 'jaccard' in self.method.lower():
-                mut_pair.get_jaccard_weight(\
-                                self.min_co_occur)
+                mut_pair.get_jaccard(self.min_co_occur)
             
             elif 'fisher' in self.method.lower():
                 mut_pair.get_fisher_pval_weight(\
@@ -299,23 +327,17 @@ class AlnMutPairSet(object):
                     
             for mp in self.mut_pair_to_obj:
                 mut_pair = self.mut_pair_to_obj[mp]
-
-                if 'jaccard' in self.method.lower():
-                    weight = mut_pair.jaccard
-
-                elif 'fisher' in self.method.lower():
-                    weight = mut_pair.pval_more
                 
                 f.write('%s\t%.6f\t%s\t%d\t%s\n' % \
-                        (mut_pair, weight, 
+                        (mut_pair, mut_pair.weight, 
                          mut_pair.contingency_table,
                          len(mut_pair.seqs),
                          ';'.join(sorted(list(mut_pair.seqs)))))
      
 
     def print_stats(self, aln_pos = [], pos_subset = []):
-
-        stderr_write(['\nALIGNMENT NETWORK PROPERTIES:'])
+        stderr_write(['\n\n------------------------------'])
+        stderr_write(['ALIGNMENT NETWORK PROPERTIES:'])
 
         length = max(len(aln_pos), self.aln.length)
 
@@ -327,6 +349,9 @@ class AlnMutPairSet(object):
         stderr_write([len(self.aln.aln_pos), 
                       "positions considered for network."])
 
-        stderr_write([len(self.mut_pair_to_obj), 
-                    "nonzero weight mutation pairs in network.\n"])
+        stderr_write([len([self.mut_pair_to_obj[mp].weight
+                           for mp in self.mut_pair_to_obj 
+                           if (self.mut_pair_to_obj[mp].weight 
+                               >= self.thresh)]),
+                      "mutation pairs in network.\n"])
 

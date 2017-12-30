@@ -20,28 +20,36 @@ class PhyloNetInput(AlnNetInput):
 
         # Phylogeny specific inputs
         self.func_transitions = {}
-        if len(self.func_transitions_file):
-            self.func_transitions = \
-                parse_keyval_dict(self.func_transitions_file)
-            stderr_write(['Using', len(self.func_transitions),
-                          'functional transitions'])
-        else:
+        not_specified = True
+        if bool(self.func_transitions_file):
+            if len(self.func_transitions_file):
+                    self.func_transitions = \
+                        parse_keyval_dict(self.func_transitions_file)
+                    stderr_write(['Using', len(self.func_transitions),
+                                  'functional transitions on tree.'])
+                    not_specified = False
+        
+        if not_specified:
             stderr_write(['Functional transitions between',
                           'internal node functions when',
                           'traversing branches',
                           'not constrained.'])
-            
         self.get_tree_files()
 
     def get_tree_files(self):
-
+        
         self.tree_files =  defaultdict(list)
         self.int_seq_files = defaultdict(list)
         self.int_func_files = defaultdict(list)
 
+        stderr_write(['Retrieving tree file(s).'])
         for prefix in self.tree_file_prefix_list:
-            prefix = os.path.join(self.working_dir,
-                                  self.data_dir, prefix)
+            if bool(prefix):
+                prefix = os.path.join(self.working_dir,
+                                      self.data_dir, prefix)
+            else:
+                prefix = os.path.join(self.working_dir,
+                                      self.data_dir)+'/'
 
             self.tree_files[prefix] = \
                 list_display_files('Nwk trees with internal '+ \
@@ -56,7 +64,7 @@ class PhyloNetInput(AlnNetInput):
                 if self.tree_internal_node_state_suffix != None:
                     self.int_func_files[prefix] = \
                         list_display_files('Reconstructed ' + \
-                            'functions on internalmnodes', 
+                            'functions on internal nodes', 
                                            prefix, 
                             self.tree_internal_node_state_suffix)
 
@@ -92,6 +100,7 @@ def run_phylo_mut_pairs(config):
     
     # Output network in tab-delimited format
     # Source\tTarget\tWeight
+    stderr_write(['---------------------'])
     stderr_write(['\nWriting network to file:\n' + inp.net_file]) 
     phylo_mut_pairs.write_network_to_file(inp.net_file)
 

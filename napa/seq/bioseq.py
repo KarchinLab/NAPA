@@ -66,14 +66,15 @@ class BioSeq(object):
                 self.seq_pos_list = [pos_subset[i] for i in \
                                      range(self.length)]
             else:
-                raise ValueError(' '.join(['Could not assign',
-                                'sequence positions:', 
-                                '\nSequence pos list length',
-                                str(len(seq_pos_list)), 
-                                '\ndoes not match alignment',
-                                'length,', str(self.length), 
-                                '\nor size of chosen subset', 
-                                str(len(pos_subset))]))
+                raise ValueError(' '.join(
+                    ['\nCould not assign sequence positions:', 
+                    '\nSequence pos list length',
+                     str(len(seq_pos_list)), 
+                    '\ndoes not match alignment length,', 
+                     str(self.length), 
+                    '\nor size of chosen subset', 
+                     str(len(pos_subset)), 
+                     'for sequence', self.seq_id]))
 
         elif len(seq_pos_list) > self.length:
             if len(pos_subset) == self.length:
@@ -83,8 +84,9 @@ class BioSeq(object):
                                      for i in range(self.length)]
 
         if len(pos_subset) \
-                    and len(pos_subset) < len(self.seq_pos_list):
+                    and len(pos_subset) <= len(self.seq_pos_list):
             self.extract_pos(pos_subset)
+        
 
 
 
@@ -93,7 +95,7 @@ class BioSeq(object):
         If pos_subset is not empty
         update sequence and position lists to that subset
         '''
-        if len(pos_subset) > 0 and len(pos_subset) < self.length:
+        if len(pos_subset) > 0 and len(pos_subset) <= self.length:
             seq_str = ''
             for posi, pos in enumerate(self.seq_pos_list):
                 if pos in pos_subset:
@@ -170,7 +172,10 @@ class BioSeq(object):
                     pos = str(self.seq_pos_list[i])
                     mut_list.append(self.seq_str[i] + pos + \
                                     other.seq_str[i])
-
+        
+        #if not len(mut_list) and self.seq_id != other.seq_id:
+        #    stderr_write(['\tWARNING: No mutations between sequences:',
+        #                  self.seq_id, other.seq_id])
         return mut_list
 
 
@@ -241,16 +246,12 @@ class BioSeqAln(object):
         fasta_recs = fasta_iter(aln_fasta_file)
     
         for r in fasta_recs:
-
+            repeated_ids = 0
             seq_id, seq_str = r[0], r[1]
             seq_id = re.sub('[!@#$.]|','', seq_id)
-        
+            
             if seq_id in self.seqid_to_seq:
-                stderr_write(['Sequence ID', seq_id, 
-                              'from FASTA file:\n',
-                              aln_fasta_file,
-                              'already in alignment.'
-                              '\nSequence will not be added!'])
+                repeated_ids += 1
                 continue
 
             self.seqid_to_seq[seq_id] = \
@@ -261,6 +262,11 @@ class BioSeqAln(object):
                            seq_annot = copy.deepcopy(self.seq_annot))
 
 
+        if repeated_ids > 0:
+            stderr_write(['WARNING: There were', repeated_ids, 
+                          'non-unique sequence ids.',
+                          'Sequences with duplicate ids not added!'])
+                          
 
     def annot_seqs(self, annot_key = 'function', 
                    seqid_to_annot_file = '',

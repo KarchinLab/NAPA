@@ -8,12 +8,65 @@ import random
 
 import networkx as nx
 from networkx.utils import weighted_choice
+from networkx.algorithms import community
 
 from napa.utils.serials import *
 from napa.utils.io import *
 
-from napa.net.community import *
+#from napa.net.community import *
 import napa.net.community_louvain as ml
+
+def set_nx_attribute(g, att_type, att_name, 
+                     att_dict):
+    ''' 
+    Custom version of 
+    networkx.classes.function.set_node/edge_attributes
+    works with multiple versions of networkx
+    '''
+    if att_type == 'node':
+        for v, att_val in att_dict.iteritems():
+            try:
+                g.nodes[v][att_name] = att_val
+            except KeyError:
+                pass
+    elif att_type == 'edge':
+        for (u, v), att_val in att_dict.iteritems():
+            try:
+                g[u][v][att_name] = att_val
+            except KeyError:
+                pass
+    return g
+
+def scale_nx_attribute(g, att_type, att_name, 
+                       att_dict):
+    '''
+    Scale a numerical node / edge attribute 
+    of a networkx graph
+    '''
+
+    if att_type == 'node':
+        for v, d in g.nodes.iteritems():
+            try:
+                g.nodes[v][att_name] *= \
+                        float(att_dict[v])
+            except (KeyError, ValueError, 
+                    AttributeError) as e:
+                pass
+    elif att_type == 'edge':
+        for u, v, d in g.edges(data=True):
+            try:
+                g[u][v][att_name] *= \
+                    float(att_dict[v])
+            except (KeyError, ValueError, 
+                    AttributeError) as e:
+                pass
+    return g
+        
+def most_central_edge(g):
+    centrality = nx.edge_betweenness_centrality(g, 
+        weight='weight')
+    return max(centrality, key=centrality.get)
+
 
 class MutNet(object):
 
@@ -107,22 +160,24 @@ class MutNet(object):
         min_weight = float(min([d['weight'] for u, v, d in \
                                 self.g.edges(data=True)]))
 
-        nx.set_edge_attributes(self.g, 'weight',
-            {(u, v):d['weight']/max_weight \
-             for u, v, d in self.g.edges(data=True)})
+        minmax_weight_ratio = min_weight/max_weight
+        
+        for u, v, d in self.g.edges(data=True):
+            self.g[u][v]['weight'] = \
+                self.g[u][v]['weight']/max_weight
 
-        nx.set_edge_attributes(self.g, 'invWeight',
-            {(u, v):(min_weight/max_weight)/d['weight'] \
-             for u, v, d in self.g.edges(data=True)})
+        for u, v, d in self.g.edges(data=True):
+            self.g[u][v]['invWeight'] = \
+                minmax_weight_ratio/self.g[u][v]['weight']
 
+        # Reversed graph
+        for u, v, d in self.rg.edges(data=True):
+            self.rg[u][v]['weight'] = \
+                self.rg[u][v]['weight']/max_weight
 
-        nx.set_edge_attributes(self.rg, 'weight',
-            {(u, v):d['weight']/max_weight \
-             for u, v, d in self.rg.edges(data=True)})
-
-        nx.set_edge_attributes(self.rg, 'invWeight',
-            {(u, v):(min_weight/max_weight)/d['weight'] \
-             for u, v, d in self.rg.edges(data=True)})
+        for u, v, d in self.rg.edges(data=True):
+            self.rg[u][v]['invWeight'] = \
+                minmax_weight_ratio/self.rg[u][v]['weight']
             
     #------------------------------------------------------#
     def normalize(self, node_att_dict = {}, norm_factor = 1.):
@@ -176,85 +231,91 @@ class MutNet(object):
         Combined standard (local and shortest-path)
         and kpath centrality metrics for 
         single nodes. 
-        '''
 
-        if 'loc.in.deg' in cent_list:
-            norm_factor = self.g.number_of_nodes() - 1.
-            # number of in neighbors 
-            # (disreguard link weights)
-            # normalize each node by remaining number 
-            # of nodes in network
-            nx.set_node_attributes(self.g, 'loc.in.deg', 
-                self.normalize(self.g.in_degree(weight=None),
-                                             norm_factor))
+        Normalize by N-1 
+        '''
 
         norm_factor = self.g.number_of_nodes() - 1.
 
+        if 'loc.in.deg' in cent_list:
+            self.g = set_nx_attribute(
+                self.g, 'node', 'loc.in.deg',
+                self.normalize(
+                    dict(self.g.in_degree(weight=None)),
+                    norm_factor))
+
         if 'loc.out.deg' in cent_list:
-            nx.set_node_attributes(self.g, 'loc.out.deg', 
-                self.normalize(self.g.out_degree(weight=None),
-                               norm_factor))
+            self.g = set_nx_attribute(
+                self.g, 'node','loc.out.deg',
+                self.normalize(
+                    dict(self.g.out_degree(weight=None)),
+                    norm_factor))
+
         
         if 'loc.deg' in cent_list:
-            nx.set_node_attributes(self.g, 'loc.deg', 
-                self.normalize(\
-                    self.g.degree(weight=None),
-                               norm_factor))
+            self.g = set_nx_attribute(
+                self.g, 'node','loc.deg',
+                self.normalize(
+                    dict(self.g.degree(weight=None)),
+                    norm_factor))
 
         if 'loc.strength' in cent_list:
-            nx.set_node_attributes(self.g, 'loc.strength', 
-                self.normalize(\
-                    self.g.degree(weight = 'weight'),
-                               norm_factor))
+            self.g = set_nx_attribute(
+                self.g, 'node', 'loc.strength',
+                self.normalize(
+                    dict(self.g.degree(weight='weight')),
+                    norm_factor))
 
         if 'loc.in.strength' in cent_list:
-            nx.set_node_attributes(self.g, 'loc.in.strength', 
-                self.normalize(\
-                    self.g.in_degree(weight = 'weight'),
-                               norm_factor))
+            self.g = set_nx_attribute(
+                self.g, 'node', 'loc.in.strength',
+                self.normalize(
+                    dict(self.g.in_degree(weight='weight')),
+                    norm_factor))
 
         if 'loc.out.strength' in cent_list:
-            nx.set_node_attributes(self.g, 
-                'loc.out.strength', 
-                self.normalize(\
-                    self.g.out_degree(weight = 'weight'),
-                                            norm_factor))
+            self.g = set_nx_attribute(
+                self.g, 'node', 'loc.out.strength',
+                self.normalize(
+                    dict(self.g.out_degree(weight='weight')),
+                    norm_factor))
+
         #------------------------------------------------------#
         # Note: all (shortest) path-length based centralities 
         # use the inverse weight -- 
         # this is a proxy for distance, rather than assoc.,
         # s.t. stronger association weight = shorter dist.
         if 'glob.close' in cent_list:
-            nx.set_node_attributes(self.g, 'glob.close', 
+            self.g = set_nx_attribute(self.g,'node','glob.close', 
                 nx.closeness_centrality(self.g, 
                                         distance = 'invWeight', 
-                                        normalized = True))
+                                        wf_improved = True))
 
         if 'glob.info' in cent_list:
-            nx.set_node_attributes(self.g, 'glob.info',
+            self.g = set_nx_attribute(self.g, 'node', 'glob.info', 
                 nx.current_flow_closeness_centrality(self.g, 
-                                        weight = 'weight'))
+                    distance = 'weight'))
 
         if 'glob.eigen' in cent_list:
             try:
-                ecent = nx.eigenvector_centrality(self.rg, 
-                    max_iter = 500, tol = 1e-05,
-                    weight = 'weight')
-
+                evcent = nx.eigenvector_centrality(self.rg, 
+                    max_iter=400, tol=1e-05, weight='weight')
             except nx.exception.NetworkXError:
-                ecent = {n:0. for n in self.g.nodes()}
-            
-            nx.set_node_attributes(self.g, 'glob.eigen',
-                                   ecent)
-                                       
+                evcent = {n:0. for n in self.g.nodes()}
 
+            self.g = set_nx_attribute(self.g, 'node', 
+                                      'glob.eigen', evcent)
+                                       
         if 'glob.pagerank' in cent_list:
-            nx.set_node_attributes(self.g, 'glob.pagerank',
+            self.g = set_nx_attribute(self.g, 'node', 
+                'glob.pagerank', 
                 nx.pagerank(self.rg, weight = 'weight'))
+
 
         # betweenness is not distance based in networkx
         if 'glob.betw' in cent_list:
-            nx.set_node_attributes(self.g, 'glob.betw',
+            self.g = set_nx_attribute(self.g, 'node', 
+                'glob.betw',
                 nx.betweenness_centrality(self.g, 
                     weight = 'weight', normalized = True))
 
@@ -557,7 +618,7 @@ class MutNet(object):
             st_path = []
             
             # choose source node
-            s = random.choice(self.g.nodes())
+            s = random.choice(list(self.g.nodes))
 
             # choose a random path length
             l = random.randint(path_len + 2, k) 
@@ -615,75 +676,105 @@ class MutNet(object):
 
     #------------------------------------------------------#
     #----------------------COMMUNITIES---------------------# 
-    def get_node_clusters(self, node_clust_file):
-        comm_names = []
-        comm_type = 'MLv'
+    def get_node_clusters(self, node_clust_file, 
+                          comm_types = ['MLV']):
+        #comm_types = ['GNB', 'ALP', 'MLV']
+        self.communities = {}
 
-        if comm_type == 'GN':
+        # Community detection algorithms not defined on
+        # directed graphs, so need to:
+        # deep copy with automatic conversion to undirected
+        self.ugc = self.g.to_undirected() 
+
+
+        if 'GNB' in comm_types:
             # Get Girwan-Newman edge betw. communities
-            self.get_gn_communities(5)
-            comm_names +=  sorted(self.gn_comm_levels.keys())
-            for level_str in self.gn_comm_levels:
-                nx.set_node_attributes(self.g, level_str, 
-                    many_to_one(self.gn_comm_levels[level_str]))
+            self.get_gn_communities()
         
-        elif comm_type == 'ALP': 
+        if 'ALP' in comm_types: 
             #Get asynchronous label propagation communities
-            comm_names.append('community.alp')
             self.get_alp_communities()
-            nx.set_node_attributes(self.g, 'community.alp', 
-                                   many_to_one(self.alp_comm))
 
-        elif comm_type == 'MLv':
+        if 'MLV' in comm_types:
             # Louvain multilevel communities
             self.get_multilevel_communities()
-            comm_names = sorted(self.ml_communities.keys())
-            
-            for comm_name in comm_names:
-                nx.set_node_attributes(G = self.g, 
-                    name = comm_name, 
-                    values = self.ml_communities[comm_name])
+
+        for comm_name in self.communities:
+            set_nx_attribute(self.g, 'node', comm_name,
+                             self.communities[comm_name])
 
         # Write desired community partitions to file
-        self.write_communities(comm_names,
+        self.write_communities(self.communities.keys(),
                                node_clust_file)
 
     #------------------------------------------------------# 
-    def get_gn_communities(self, levels = 2): 
-        
-        if not hasattr(self, 'gn_components'):
-            comp = girvan_newman(self.g)
+    def get_gn_communities(self):
+
+        comm_generator = community.girvan_newman(
+            self.ugc, most_central_edge)
+        comm_part = next(comm_generator) # top level
+        node_comm = {}
+        for comm_i, node_list in enumerate(comm_part):
+            for node in node_list:
+                node_comm[node] = comm_i
+
+        comm_mod = community.quality.modularity(
+            G=self.ugc, communities = comm_part,
+            weight = 'weight')
+
+        self.communities['comm.GNB_%.2f'%comm_mod] = \
+                                        node_comm
             
-            self.gn_comm_levels = {}
-            i = 0
-            for communities in islice(comp, levels):
-                self.gn_comm_levels['community.gn.%d'%i] = \
-                    {j:sorted(list(c)) for j,c in \
-                         enumerate(communities)}
-                i += 1
-            
+    #------------------------------------------------------# 
+    def get_alp_communities(self): 
+        comm_iterator = community.asyn_lpa_communities(
+            self.ugc, weight='weight')
+        comm_part = list(comm_iterator)
+        node_comm = {}
+        for comm_i, node_set in enumerate(comm_part):
+            for node in node_set:
+                node_comm[node] = comm_i
+
+        comm_mod = community.quality.modularity(
+            G=self.ugc, communities = comm_part, 
+            weight='weight')
+
+        self.communities['comm.ALP_%.2f'%comm_mod] = \
+                                            node_comm
 
     #------------------------------------------------------# 
     def get_multilevel_communities(self): 
         '''
-        Get Louvain multilevel communities.
+        Get hierarchical multilevel communities.
         '''
-        self.ml_communities = {}
-        for r in [0.5, 1., 2., 5., 10., 100.]:
-            best_part = ml.best_partition(graph = self.g, 
-                                          weight = 'weight', 
-                                          resolution = r)
-            mod = ml.modularity(best_part, self.g)
-            comm_name = 'comm.res_%.1f.mod_%.3f'%(r, mod)
-            self.ml_communities[comm_name] = best_part
 
-    #------------------------------------------------------# 
-    def get_alp_communities(self): 
-        
-        comp = asyn_lpa_communities(self.g, weight='weight')
+        partitions, modularities = [], []
+        resolutions = [0.5, 1., 2., 4., 8.]
+        for r in resolutions:
+            best_partition = ml2.best_partition(
+                graph = self.ugc, weight = 'weight', 
+                resolution = r)
+            partitions.append(best_partition)
+            modularities.append(ml2.modularity(
+                best_partition, self.ugc, 'weight'))
+ 
+        max_mod, max_idx = 0., 1
+        for im, mod in enumerate(modularities):
+            if mod > max_mod:
+                max_mod = mod
+                max_idx = im
+                
+        num_partitions = len(set(partitions[max_idx].values()))
+        comm_part = [set() for _ in range(num_partitions)]
+        for (node, comm) in partitions[max_idx].iteritems():
+            comm_part[comm].add(node)
 
-        self.alp_comm = {j:sorted(list(c)) for j,c in \
-                         enumerate(comp)}
+        comm_mod = community.quality.modularity(G=self.ugc, 
+                communities = comm_part, weight = 'weight')
+
+        self.communities['comm.MLV_%.2f'%comm_mod] = \
+                                    partitions[max_idx]
+
         
     #------------------------------------------------------#
     def write_communities(self, comm_names, node_clust_file):

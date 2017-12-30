@@ -59,6 +59,8 @@ class TreeMut(object):
 class TreeMutPair(object):
     '''
     Pair of mutations from a single tree.
+    Mutations can be on two adjacent edges or
+    on occur along the same phylo tree edge.
     '''    
     def __init__(self, phylo_edge_pairs = set(), 
                  mut_pair = None, wt_seq = None,
@@ -156,7 +158,7 @@ class TreeMutPair(object):
                      [p.name for p in self.other_lineage]])
 
 
-    def get_contingency_table(self):
+    def get_contingency_table_lineage_size(self):
         '''
         Contingency table for Fisher's Exact Test.
         Uses overall size of clades where mutations in pair
@@ -177,8 +179,11 @@ class TreeMutPair(object):
         A simpler contingency table based on counts of 
         co-occurrence of mutations in tree edges 
         rather than clades. 
-        Looking at clade size tends to be more informative.
         '''
+        if not len(all_phylo_edge_pairs):
+            raise ValueError('\nNo pairs of edges in phylogeny'
+                             ' have been assigned!!')
+
         # both mutations
         self.num11 = len(self.phylo_edge_pairs)
         
@@ -194,22 +199,41 @@ class TreeMutPair(object):
         self.num00 = len(all_phylo_edge_pairs\
                           -self.mut_pair[0].phylo_edge_pairs \
                           -self.mut_pair[1].phylo_edge_pairs)
+
         self.contingency_table = [[self.num11, self.num01], 
                                   [self.num10, self.num00]]
+
+
+
+    def get_raw_count(self):
+        '''
+        Weight pairs by co-occurrence count only
+        '''
+        
+        self.raw_count = len(self.phylo_edge_pairs)  
+
 
 
     def get_mod_jaccard(self, all_phylo_edge_pairs):
         '''
         Modified Jaccard score for clade / edge count overlap
         '''
-        self.get_contingency_table()
-        #self.get_contingency_table_edge_counts(all_phylo_edge_pairs)
-        [[num11, num10], [num01, num00]] = self.contingency_table
-        # Penalizes for small co-ocurrence num11
-        epsilon = float(num00)/(num11 + num10 + num01)
 
-        self.mod_jaccard = max(0., 
-            (self.num11 - epsilon) / float(num11 + num01 + num10))
+        #self.get_contingency_table_lineage_size()
+        self.get_contingency_table_edge_counts(all_phylo_edge_pairs)
+
+        [[num11, num10], [num01, num00]] = self.contingency_table
+
+        if (num11 < 2):
+            self.mod_jaccard = 0.
+            return
+
+        # Penalizes for small co-ocurrence num11
+        epsilon = 0.
+        #epsilon = float(num00)/(num11 + num10 + num01 + num00)
+
+        self.mod_jaccard = max(0., (num11 - epsilon)) /  \
+                           float(num11 + num01 + num10)
 
 
     def get_fisher_pval(self):
@@ -219,8 +243,10 @@ class TreeMutPair(object):
         on the contingency table. For association, only need the 
         right-tailed p-value: pval_more.
         '''
-        self.assign_lineage_distribution()
-        self.get_contingency_table()
+
+        #self.get_contingency_table_lineage_size()
+        self.get_contingency_table_edge_counts(all_phylo_edge_pairs)
+
         self.odds_ratio_less, self.p_val_less = \
             fisher_exact(self.contingency_table, 
                          alternative = 'less')
@@ -332,10 +358,13 @@ class TreeMutPairSet(object):
             if 'fisher' in method.lower():
                 mut_pair.pval_more = 1. # default setting
                 mut_pair.get_fisher_pval()
-            else:
+            elif 'jaccard' in method.lower():
                 mut_pair.mod_jaccard = 0.
                 mut_pair.get_mod_jaccard(self.all_phylo_edge_pairs)
-
+            elif 'raw_count' in method.lower():
+                mut_pair.raw_count = 0.
+                mut_pair.get_raw_count()
+                
 
     def __repr__(self):
         out_str = ''
@@ -578,9 +607,11 @@ class TreeEnsembleMutPairs(object):
                    self.tree_support_thresh:
                     continue
 
-            if 'jaccard' in self.method.lower():
+            if (('jaccard' in self.method.lower()) or 
+                ('raw_count' in self.method.lower())): 
                 if self.mut_pair_to_weight[mp] < self.thresh:
                     continue
+
             if 'fisher' in self.method.lower():
                 if self.mut_pair_to_weight[mp] > self.thresh:
                     continue
@@ -625,9 +656,11 @@ class TreeEnsembleMutPairs(object):
                                 mut_pair_to_trees)
        
     def add_mut_pairs(self, mut_pair_set):
-        if 'fisher' in self.method.lower():
+        if 'raw_count' in self.method.lower(): 
+            self.add_mut_pairs_raw_count(mut_pair_set)
+        elif 'fisher' in self.method.lower():
             self.add_mut_pairs_fisher(mut_pair_set)
-        else:
+        elif 'jaccard' in self.method.lower(): 
             self.add_mut_pairs_mod_jaccard(mut_pair_set)
 
 
@@ -647,6 +680,20 @@ class TreeEnsembleMutPairs(object):
                         1./self.num_trees
                 self.mut_pair_to_trees[mp] += 1
                 
+
+    def add_mut_pairs_raw_count(self, mut_pair_set):
+        '''
+        The weight will be averaged over tree topologies
+        '''
+        
+        for mp in mut_pair_set.mut_pair_to_obj:
+            # mut_pair_set for a single tree
+            mut_pair = \
+                mut_pair_set.mut_pair_to_obj[mp]
+
+            self.mut_pair_to_weight[mp] += \
+                mut_pair.raw_count / float(self.num_trees)
+            self.mut_pair_to_trees[mp] += 1
 
 
     def add_mut_pairs_mod_jaccard(self, mut_pair_set):
@@ -697,8 +744,8 @@ class TreeEnsembleMutPairs(object):
 
 
     def print_stats(self, aln_pos = [], pos_subset = []):
-
-        stderr_write(['\nPHYLOGENY-BASED NETWORK PROPERTIES:'])
+        stderr_write(['\n\n---------------------------------'])
+        stderr_write(['PHYLOGENY-BASED NETWORK PROPERTIES:'])
 
         length = max(len(aln_pos), self.aln.length)
 
@@ -716,7 +763,7 @@ class TreeEnsembleMutPairs(object):
         stderr_write([len(self.mut_pair_to_weight), 
                     'Mutation pairs with non-zero',
                     'edge weight.\n'])
-
+        stderr_write(['#######################################'])
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 def get_tree_mut_pair_dict(tree_ensemble, prefix, i):
@@ -729,12 +776,16 @@ def get_tree_mut_pair_dict(tree_ensemble, prefix, i):
 
     int_seq_file = te.int_seq_files[prefix][i]
 
-    int_func_file = te.int_func_files[prefix][i] \
-                    if len(te.int_func_files) \
-                    else ''
+    int_func_file = ''
+    if hasattr(te, 'int_func_files'):
+        if len(te.int_func_files):
+            if len(te.int_func_files[prefix]) > i:
+                int_func_file = te.int_func_files[prefix][i]
 
-    int_seqid_to_prot_func = \
-         parse_keyval_dict(int_func_file)
+    int_seqid_to_prot_func = {}        
+    if len(int_func_file):
+        int_seqid_to_prot_func = \
+            parse_keyval_dict(int_func_file)
 
     mut_pair_set = \
         TreeMutPairSet(\
@@ -756,13 +807,19 @@ def get_tree_mut_pair_dict(tree_ensemble, prefix, i):
     for mp in mut_pair_set.mut_pair_to_obj:
         mut_pair = mut_pair_set.mut_pair_to_obj[mp]
 
-        if 'fisher' in te.method.lower():
+        if 'raw_count' in te.method.lower(): 
+            if mut_pair.raw_count > 0.0:
+                mut_pair_to_weight[mp] += \
+                mut_pair.raw_count / float(te.num_trees)
+                mut_pair_to_trees[mp] += 1
+
+        elif 'fisher' in te.method.lower():
             if mut_pair.p_val_more <= te.thresh:
                 mut_pair_to_weight[mp] += \
                                 1./te.num_trees
                 mut_pair_to_trees[mp] += 1
 
-        else:
+        elif 'jaccard' in te.method.lower(): 
             if mut_pair.mod_jaccard > 0.0:
                 mut_pair_to_weight[mp] += \
                 mut_pair.mod_jaccard / float(te.num_trees)

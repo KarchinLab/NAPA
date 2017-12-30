@@ -1,7 +1,7 @@
 import os
 from itertools import groupby
 import re
-
+from napa.utils.io import stderr_write
 
 def fasta_iter(fasta_name):
     '''
@@ -14,7 +14,9 @@ def fasta_iter(fasta_name):
         for header in faiter:
             header = header.next()[1:].strip() # drop the '>'
             #join all sequence lines into one string
-            seq = "".join(s.strip() for s in faiter.next()) 
+            seq = "".join(s.strip().replace('\n','').strip()
+                          for s in faiter.next())
+            seq = seq.replace('\n','').replace(' ','').strip()
             yield header,  seq
 
 def fasta_to_dict(fasta_input_name):

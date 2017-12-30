@@ -23,13 +23,15 @@ class AlnNetInput(object):
     def __init__(self, config):
         self.__dict__.update(vars(config))
 
-        print
-        print '\n'.join(sorted(['%s\t%s'%(k,v) for (k,v) \
-                                in vars(self).iteritems()]))
+        #print
+        #print '\n'.join(sorted(['%s\t%s'%(k,v) for (k,v) \
+        #                        in vars(self).iteritems()]))
 
         # REQUIRED: Reads wild-type sequence or
         # provides the ID of this sequence in the alignment
         if os.path.isfile(self.wild_type):
+            stderr_write(['Reading WT/ancestral sequence',
+                          'from file', self.wild_type])
             self.wt_dict = fasta_to_dict(self.wild_type)
             if len(self.wt_dict):
                 self.wt_id = self.wt_dict.keys()[0]
@@ -46,19 +48,27 @@ class AlnNetInput(object):
             self.pos_list = \
             [int(p) for p in \
              parse_column(self.pos_list_file)]
+            stderr_write(['Custom numbering',
+                          'specified for',
+                          len(self.pos_list), 
+                          'alignment positions.'])
 
         # OPTIONAL: List of protein residue positions 
         # considered for network.
-        # Allows removal of residues from signaling peptide, 
-        # other domains/regions not studied.
+        # Allows removal of residues e.g.
+        # from signaling peptide, 
+        # highly variable domains/regions.
         if len(self.pos_subset_file) == 0:
             self.pos_subset = []
         else:
             self.pos_subset = \
             [get_int_substring(p) for p in \
              parse_column(self.pos_subset_file)]
-
-
+            stderr_write(['Custom subset specified.',
+                          'It consists of', 
+                          len(self.pos_subset), 
+                          'alignment positions.'])
+            
         # OPTIONAL: Ranges of protein residues to include
         # Can be used instead of pos_subset_file
         if len(self.protein_ranges):
@@ -78,9 +88,24 @@ class AlnNetInput(object):
                                 str(recs))
                     begin = get_int_substring(recs[0])
                     end = get_int_substring(recs[1])
-                    self.pos_subset |= set(range(begin, 
-                                             end + 1))
+                    if not len(self.pos_list):
+                        self.pos_subset |= \
+                            set(range(begin, end + 1))
+                    else:
+                        self.pos_subset |= \
+                            set([p for p in self.pos_list 
+                                 if p in range(begin, end)])
+                                           
                 self.pos_subset = sorted(list(self.pos_subset))
+                stderr_write(['Custom range',
+                          'specified. It consists of',
+                          len(self.pos_subset), 
+                          'alignment positions.'])
+
+        stderr_write(['Position subset consisting of',
+                     len(self.pos_subset), 
+                     'alignment columns will be',
+                      'analyzed.'])
                 
         # OPTIONAL: Threshold for including links in network
         # For p-values from Fisher's Exact Test, this is the 
@@ -100,14 +125,14 @@ class AlnNetInput(object):
                           '\nDefault set to:', self.thresh])
 
         if not hasattr(self, 'min_co_occur'):
-            self.min_co_occur = 1
+            self.min_co_occur = 2
             stderr_write(['WARNING: No minimum co-occurrence',
                           'count provided for network method', 
                           self.method,
                           '\nDefault set to:', self.min_co_occur])
 
         elif not to_bool(self.min_co_occur):
-            self.min_co_occur = 1
+            self.min_co_occur = 2
             stderr_write(['WARNING: No minimum co-occurrence',
                           'count provided for network method', 
                           self.method,
@@ -122,6 +147,7 @@ class AlnNetInput(object):
         else:
             self.seqid_to_prot_func = \
                 parse_keyval_dict(self.prot_func_file)
+
 
         # OPTIONAL: Subset of protein selected functions 
         # considered 
@@ -219,6 +245,10 @@ class AlnNetInput(object):
                               '(or aln. column subset chosen).\n',
                               self.wt_id, 'not in\n', 
                               str(sorted(self.aln.seqid_to_seq))]))
+            #stderr_write(['WildType positions'] + 
+            #             [self.wt_seq.seq_str[i]+
+            #              str(self.wt_seq.seq_pos_list[i]) 
+            #              for i in range(len(self.wt_seq.seq_str))])
 
 
 
@@ -238,14 +268,17 @@ def run_aln_mut_pairs(config):
 
     # Output network in tab-delimited format
     # Source\tTarget\tWeight
-    stderr_write(['\nWriting network to file:\n' + inp.net_file]) 
+    stderr_write(['-----------------------'])
+    stderr_write(['\nWriting network to file:\n' + 
+                  inp.net_file]) 
     aln_mut_pair_set.write_network_to_file(inp.net_file)
 
     # outputs additional information about edge weights
     # to a separate table
     if to_bool(inp.output_edge_weight_table):
         stderr_write(['\nWriting network extended network',
-                      'table to file:\n' + inp.net_table_file]) 
+                      'table to file:\n' + 
+                      inp.net_table_file]) 
         aln_mut_pair_set.write_table_to_file(inp.net_table_file)
  
     # Prints basic stats for reconstructed network

@@ -17,7 +17,6 @@ class Config():
         
         self.__dict__.update(config)
         self.set_run_type(command_type)
-        print vars(self)
         self.check_input()
 
     #---------------------------------------------------------#
@@ -206,8 +205,6 @@ class Config():
            to_bool(self.protein_ranges):
             self.protein_ranges = []
         
-
-
         # OPTIONAL: When using protein functional selection
         # for alignment or phylo leaf sequences, we need 
         # sequence functional annotation and 
@@ -265,6 +262,7 @@ class Config():
         # Functional transitions between phylogeny sequences 
         # allowed (evolution of specific function)
         self.func_transitions = {}
+
         if hasattr(self, 'func_transitions_file'):
             if self.func_transitions_file != None:
                 self.func_transitions_file = \
@@ -278,6 +276,9 @@ class Config():
                         'Internal node functions needed when',
                         'constraining by',
                         'functional transitions.']))
+        else:
+            self.func_transitions_file = ''
+
         
         if not len(self.tree_file_prefix_list):
            raise ValueError(' '.join([\
@@ -320,6 +321,12 @@ class Config():
         if not hasattr(self, 'cent_type') or \
            self.cent_type == None:
             self.cent_type = 'loc'
+
+        if not hasattr(self, 'partition_types') or \
+           self.partition_types == None or \
+           not len(self.partition_types):
+            self.partition_types = ['MLV']
+
 
     #---------------------------------------------------------#
     def print_input_summary(self):

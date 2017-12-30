@@ -136,5 +136,6 @@ def run_net_analysis(config):
             outfiles = inp.cent_files)
 
     if to_bool(inp.cluster_nodes):
-        mn.get_node_clusters(inp.node_clust_file)
+        mn.get_node_clusters(inp.node_clust_file, 
+                             inp.partition_types)
     
