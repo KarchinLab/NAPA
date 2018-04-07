@@ -1,6 +1,6 @@
 #=========================================================#
 # Sample NAPA configuration file
-# Undirected, phylogeny-based network
+# Directed, phylogeny-based network
 #=========================================================#
 # Input and output dirs will be relative to working_dir
 # All input files will be in the input_dir
