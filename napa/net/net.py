@@ -345,7 +345,7 @@ class MutNet(object):
 
             sorted_cent_names = \
             flatten([self.g.node[node].keys() for node in \
-                     self.g.nodes_iter()])
+                     self.g.nodes()])
             sorted_cent_names = \
             sorted(list(set(sorted_cent_names)))
         
@@ -388,7 +388,7 @@ class MutNet(object):
 
             sorted_cent_names = \
             flatten([self.g.node[node].keys() for node in \
-                     self.g.nodes_iter()])
+                     self.g.nodes()])
             sorted_cent_names = \
             sorted(list(set(sorted_cent_names)))
         
