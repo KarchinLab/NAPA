@@ -751,11 +751,11 @@ class MutNet(object):
         partitions, modularities = [], []
         resolutions = [0.5, 1., 2., 4., 8.]
         for r in resolutions:
-            best_partition = ml2.best_partition(
+            best_partition = ml.best_partition(
                 graph = self.ugc, weight = 'weight', 
                 resolution = r)
             partitions.append(best_partition)
-            modularities.append(ml2.modularity(
+            modularities.append(ml.modularity(
                 best_partition, self.ugc, 'weight'))
  
         max_mod, max_idx = 0., 1

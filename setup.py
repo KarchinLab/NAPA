@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='napa',
-      version='1.2',
+      version='1.3',
       description='Network Analysis of Protein Adaptation (intra-protein residue coevolution network construction and analysis)',
       long_description=readme(),
       url='http://karchinlab.org/apps/appNapa.html',

@@ -88,12 +88,25 @@ class Config():
             suffix += method_str 
 
             thresh_str = '-t_'
-            if hasattr(self, 'thresh'):
-                thresh_str += str(self.thresh)
+            if not hasattr(self, 'thresh'):
+                stderr_write(['WARN: No edge weight',
+                    'threshold specified.',
+                    'Setting threshold to default for',
+                    'mutation coocurrence counting',
+                    'method (method argument).'])
+                if 'jaccard' in method_str:
+                    self.thresh = 0.01
+                    thresh_str += str(self.thresh)                                  
+                elif 'raw' in method_str:
+                    self.thresh = 1
+                    thresh_str += str(self.thresh)
+                else:
+                    thresh_str += 'na'
+                
             else:
-                thresh_str += 'na'
+                thresh_str += str(self.thresh)
             suffix += thresh_str 
-
+                
             if self.net_type == 'aln':
                 occur_str = '-mo_'
                 if hasattr(self, 'min_co_occur'):

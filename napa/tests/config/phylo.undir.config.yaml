@@ -1,16 +1,18 @@
 #=========================================================#
-# Example NAPA configuration file
+# Sample NAPA configuration file
+# Undirected, phylogeny-based network
 #=========================================================#
-# Input and output dirs will be relative to working_dir
+#---------------------------------------------------------#
+# REQ: Input and output dirs will be relative to working_dir
 # All input files will be in the input_dir
 # All output files will be in the output_dir
+#---------------------------------------------------------#
 working_dir: ./
 data_dir: data/
 results_dir: results/
-
-#=========================================================#
-# REQUIRED, for both construction and analysis
-#=========================================================#
+#---------------------------------------------------------#
+# REQ for network construction and analysis
+#---------------------------------------------------------#
 # Network type: directed vs. undirected
 edge_type: undir
 net_type: phylo
@@ -19,39 +21,59 @@ net_file_base: TEM-ext-spec
 # If left blank, name will be built from 
 # other options, using net_file_base and dirs
 net_file: 
+#---------------------------------------------------------#
 
-
-#=========================================================#
+#---------------------------------------------------------#
 # Network Construction - Aln and Phylo Based Networks
-#=========================================================#
-# REQ: options for network construction
-method: mod_jaccard
-thresh: 0.005
+#---------------------------------------------------------#
+# REQ: Method for counting weights: 
+# `raw_count`:raw co-occurrence count
+# `mod_jaccard`: or modified Jaccard index
+method: raw_count
+#---------------------------------------------------------#
+# OPT: The minimum link weight threshold for 
+# including a link in the network 
+# [0.01] for mod_jaccard, [1] for raw_count
+# For `mod_jaccard`, `thresh` needs to be < 1.0
+thresh: 1
+#---------------------------------------------------------#
+# OPT: Minimum raw co-occurrence count is 1
+# (regardless of which weighting method was used)
 min_co_occur: 1
+#---------------------------------------------------------#
+# OPT: Whether or not to output a more detailed table of 
+# edge weights. If `no` outputs network only. [`yes`]
 output_edge_weight_table: yes
 #---------------------------------------------------------#
+# REQ: The reference sequence (for defining mutations)
 wild_type: TEM_1
+#---------------------------------------------------------#
+# REQ: Original protein multiple seq. alignment
 aln_fasta_file: TEM-SHV-prot-aln.fasta
+#---------------------------------------------------------#
 # Whether or not to print the list of mutations 
-# in each sequence in the alignment to file
+# in each sequence in the alignment to a separate file
 print_seq_muts: yes
 #---------------------------------------------------------#
 # OPT: Custom numbering of protein/alignment positions
 pos_list_file: TEM-pos-list.txt
+#---------------------------------------------------------#
 # OPT: Selecting a subset of posion/ranges in protein
+# comment this argument in when using ranges instead
 pos_subset_file: TEM-pos-subset.txt
+#---------------------------------------------------------#
+# OPT: Rather then enumerating positions, specify
+# ranges of positions (comment out below, comment in above)
+#protein_ranges:
+#- 23-296
+#---------------------------------------------------------#
 # OPT: Selecting a subset of sequences by func. annot
 prot_func_file: TEM-functions.txt
 sel_prot_func_file: TEM-functions-selected.txt
+
 #---------------------------------------------------------#
-# OPT: For phylogeny, select transitions between 
-# reconstructed functions on internal tree nodes
-func_transitions_file: TEM-ext-spec-transitions.txt
-
-
-#=========================================================#
 # Network Construction - Phylogeny based net only
-#=========================================================#
+#---------------------------------------------------------#
 # REQ: Look for pairs within a certain distance on the 
 # tree; require a minimum number of trees supporting 
 # mutation pairs
@@ -69,35 +91,41 @@ tree_internal_node_seq_suffix: .nwk.tree.anc.prot.fasta
 #---------------------------------------------------------#
 # OPTIONAL:
 tree_internal_node_state_suffix: .internalStates.txt
+#---------------------------------------------------------#
+# OPT: select transitions between 
+# reconstructed functions on internal tree nodes
+func_transitions_file: TEM-ext-spec-transitions.txt
+#---------------------------------------------------------#
 
-
-#=========================================================#
+#---------------------------------------------------------#
 # Network Analysis 
-#=========================================================#
-# REQ: Whether to perform clustering nodes into communities
+#---------------------------------------------------------#
+# REQ: Whether or not perform clustering nodes into 
+# communities
 cluster_nodes: yes
 #---------------------------------------------------------#
 # REQ: Whether to calculate node/path/relative path
 # centralities
-calculate_centralities: no
+calculate_centralities: yes
 #---------------------------------------------------------#
-# OPT: Network units for which centrality will be calculated
-# path length = number of connected nodes in path
-# when left blank, default is 1 (single node)
+# OPT: For calculating centralities
+# Calculate an 'absolute' or 'relative' (ranking) 
+# of centralities for paths with length > 1
+# default = 'absolute' when left blank or when path_len == 1
+cent_rank_type: absolute
+#---------------------------------------------------------#
+# OPT: Which types of centralities to calculate
+# Choice: ['loc','glob','both'] 
+# Default is 'loc' (local centralities), when left blank
+cent_type: both
+#---------------------------------------------------------#
+# OPT: List of network path lengths for which centrality 
+# will be calculated. The path length here is the number 
+# of connected nodes in path. Default is 1 (single node), 
+#when left blank and calculate_centralities == True. 
+#(If cent_rank_type == 'relative', default is 2)
 path_len:
 - 1
 - 2
 - 3
 #---------------------------------------------------------#
-# OPT: For calculating centralities
-# Calculate an 'absolute' or 'relative' (ranking) 
-# of centralities for paths with length > 1
-# default = 'absolute' when left blank or when 
-# path_len == 1
-cent_rank_type: absolute
-
-#---------------------------------------------------------#
-# OPT: Which types of centralities to calculate
-# Choice: ['loc','glob','both'] 
-# Default is 'loc' (local), when left blank
-cent_type: both
