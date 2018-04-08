@@ -158,8 +158,11 @@ class Config():
                 required_missing = True
 
         if required_missing:
-            raise ValueError(error_prefix + " ERROR: " + \
-                             "Missing or empty parameters!")
+            error_str = error_prefix 
+            error_str += " ERROR: Some of these required "
+            error_str += "parameters are missing or empty: "
+            error_str += ' '.join(param_list)
+            raise ValueError(error_str)
     #---------------------------------------------------------#
     def build_net_input(self):
         '''
@@ -168,8 +171,7 @@ class Config():
         '''
 
         # REQUIRED for network construction 
-        self.check_param_list(['method', 'thresh', 
-                               'output_edge_weight_table', 
+        self.check_param_list(['method', 'output_edge_weight_table', 
                                'wild_type', 'aln_fasta_file'], 
                               'Net Construct Input')
         
