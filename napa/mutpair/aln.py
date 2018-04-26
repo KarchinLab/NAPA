@@ -99,10 +99,12 @@ class AlnMutPair(object):
         '''
         [[num11, num10], 
          [num01, num00]] = self.contingency_table
+
+        if num11 < min_co_occur:
+            self.weight = 0.
+            return
         
         self.weight = num11
-                      
-
 
     def get_jaccard(self, min_co_occur = 2):
         ''' 

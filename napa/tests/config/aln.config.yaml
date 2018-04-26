@@ -35,9 +35,10 @@ method: raw_count
 # including a link in the network 
 # [0.01] for `mod_jaccard`, [1] for `raw_count`
 # For `mod_jaccard`, `thresh` needs to be < 1.0
-# thresh: 1
+# for `raw_count`, `thresh` is equiv. to `min_co_occur`
+thresh: 1
 #---------------------------------------------------------#
-# OPT: Minimum raw co-occurrence count is 1
+# OPT: Minimum raw co-occurrence count [1]
 # (regardless of which weighting method was used)
 min_co_occur: 1
 #---------------------------------------------------------#
