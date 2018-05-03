@@ -172,7 +172,7 @@ class Config():
 
         # REQUIRED for network construction 
         self.check_param_list(['method', 'output_edge_weight_table', 
-                               'wild_type', 'aln_fasta_file'], 
+                               'aln_fasta_file'], 
                               'Net Construct Input')
         
         if to_bool(self.output_edge_weight_table):

@@ -220,8 +220,8 @@ class BioSeqAln(object):
             self.subset_aln_pos(self.pos_subset)
 
         if not len(self.aln_pos):
-            stderr_write(['WARNING (BioSeqAln):',
-                         'Default alignment positions set.'])
+            #stderr_write(['WARNING (BioSeqAln):',
+            #             'Default alignment positions set.'])
             self.aln_pos = self.seqid_to_seq[\
                             self.seqid_to_seq.keys()[0]].seq_pos_list
 

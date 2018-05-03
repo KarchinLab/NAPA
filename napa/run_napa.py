@@ -8,7 +8,7 @@ python run_napa.py -r analyze -c myconfig_file
 '''
 
 import argparse
-from napa.utils.config import *
+from napa.utils.config import Config
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -30,17 +30,21 @@ def main():
     config.print_input_summary()
     
     if 'build' in args.run:
-        if 'aln' in config.net_type:
+        if config.net_type == 'aln':
             from napa.analyze.aln_mut_pairs \
                 import run_aln_mut_pairs
             run_aln_mut_pairs(config)
-
         elif 'phylo' in config.net_type: 
             from napa.analyze.phylo_mut_pairs \
                 import run_phylo_mut_pairs
             run_phylo_mut_pairs(config)
+        # create position-specific network
+        elif config.net_type == 'aln-pos':
+            from napa.analyze.aln_pos_pairs \
+                import run_aln_pos_pairs
+            run_aln_pos_pairs(config)
     
-    if 'analy' in args.run: 
+    if 'analysis' in args.run: 
         from napa.analyze.net_analysis \
             import run_net_analysis
         run_net_analysis(config)
